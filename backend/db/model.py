@@ -40,3 +40,10 @@ class News(Base):
     id = Column(Integer, primary_key=True, index=True)
     message = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.date)
+
+class SanaeiUsers(Base):
+    __tablename__ = "sanaei_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    owner = Column(String, nullable=False)
