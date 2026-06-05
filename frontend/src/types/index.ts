@@ -169,12 +169,12 @@ export const panelSchema = z.object({
 })
 
     .superRefine((val, ctx) => {
-        if (val.panel_type === '3x-ui') {
+        if (val.panel_type === '3x-ui' || val.panel_type === 'guard') {
             const token = val.token
             if (token === undefined || token === null || String(token).trim() === '') {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
-                    message: 'Token is required for 3x-ui panels',
+                    message: 'Token is required for 3x-ui or guard panels',
                     path: ['token'],
                 })
             } else if (typeof token === 'string' && token.length > 500) {

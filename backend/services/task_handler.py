@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from .limit_handler import AdminLimiter
 from .sanaei import AdminTaskService as SanaeiAdminTaskService
+from .guard import AdminTaskService as GuardAdminTaskService
 from .tx_ui import AdminTaskService as TxUIAdminTaskService
 from .marzban import AdminTaskService as MarzbanAdminTaskService
 from backend.schema.output import ResponseModel, ClientsOutput
@@ -11,6 +12,7 @@ from backend.schema._input import PanelInput, ClientInput, ClientUpdateInput
 from backend.services.sanaei import APIService as sanaei_APIService
 from backend.services.tx_ui import APIService as txui_APIService
 from backend.services.marzban import APIService as marzban_APIService
+from backend.services.guard import APIService as guard_APIService
 from backend.db import crud
 from backend.utils.logger import logger
 
@@ -19,6 +21,24 @@ async def create_new_panel(db: Session, panel_input: PanelInput) -> bool:
     if panel_input.panel_type == "3x-ui":
         try:
             connection = await sanaei_APIService(
+                panel_input.url, panel_input.token or ''
+            ).test_connection()
+
+            if not connection:
+                logger.warning(
+                    f"Panel validation failed: {panel_input.name} - missing required fields"
+                )
+                return False
+
+            logger.info(f"Panel validated successfully: {panel_input.name}")
+            return True
+        except Exception as e:
+            logger.error(f"Error connecting to panel {panel_input.url}: {str(e)}")
+            return False
+
+    elif panel_input.panel_type == "guard":
+        try:
+            connection = await guard_APIService(
                 panel_input.url, panel_input.token or ''
             ).test_connection()
 
@@ -94,6 +114,28 @@ async def update_a_panel(db: Session, panel_input: PanelInput) -> bool:
             )
             return False
 
+    elif panel_input.panel_type == "guard":
+        try:
+            connection = await guard_APIService(
+                panel_input.url, panel_input.token or ''
+            ).test_connection()
+
+            if not connection:
+                logger.warning(
+                    f"Panel validation failed during update: {panel_input.name} - missing required fields"
+                )
+                return False
+
+            logger.info(
+                f"Panel validated successfully during update: {panel_input.name}"
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                f"Error connecting to panel {panel_input.url} during update: {str(e)}"
+            )
+            return False
+
     elif panel_input.panel_type == "marzban":
         try:
             connection = await marzban_APIService(
@@ -146,6 +188,62 @@ async def get_all_users_from_panel(
 
     _admin = crud.get_admin_by_username(db, admin_username)
     panel = crud.get_panel_by_name(db, _admin.panel)
+    
+    if not panel:
+        return (
+            ResponseModel(
+                success=False,
+                message="Panel not found",
+            ),
+            [],
+        )
+
+    if panel.panel_type == "guard":
+        admin_task = GuardAdminTaskService(admin_username=admin_username, db=db)
+        _clients = await admin_task.get_all_users()
+
+        if _clients is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "success": False,
+                    "message": "No users found",
+                },
+            )
+        clients = [] 
+
+        for client in _clients:
+            clients.append(
+                ClientsOutput(
+                    id=client.get("id"),
+                    uuid=str(client.get("id")),
+                    sub_id=client.get("subId").split("/")[-1] if client.get("subId") else None,
+                    username=client.get("email"),
+                    status=client.get("enable"),
+                    is_online=client.get("is_online"),
+                    data_limit=client.get("totalGB"),
+                    used_data=client.get("usedData"),
+                    expiry_date_unix=client.get("expiryTime")
+                )
+            )
+        
+        admin_users = crud.get_user_from_guard_table(db)
+        allowed_usernames = {
+            user.username for user in admin_users if user.owner == admin_username
+        }
+
+        filtered_clients = [c for c in clients if c.username in allowed_usernames]
+
+        return (
+            ResponseModel(
+                success=True,
+                message="Users retrieved successfully", 
+                data=filtered_clients,
+            ),
+            filtered_clients,
+        )
+        
+
 
     if panel.panel_type == "3x-ui":
         admin_task = SanaeiAdminTaskService(admin_username=admin_username, db=db)
@@ -281,8 +379,60 @@ async def add_new_user(
 
     _admin = crud.get_admin_by_username(db, admin_username)
     panel = crud.get_panel_by_name(db, _admin.panel)
+    
+    if not panel:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "success": False,
+                "message": "Panel not found",
+            },
+        )
+    
     admin_check = AdminLimiter(admin_username=admin_username, db=db)
 
+    if panel.panel_type == "guard":
+        if not admin_check.admin_is_active():
+            logger.warning(f"Inactive admin attempted to add user: {admin_username}")
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "success": False,
+                    "message": "Your admin account is inactive. Contact support.",
+                },
+            )
+        elif not admin_check.check_traffic_limit(user_input.total):
+            logger.warning(
+                f"Admin {admin_username} exceeded traffic limit when adding user: {user_input.email}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "success": False,
+                    "message": f"Insufficient traffic to add this user, your limit: {round((_admin.traffic) / (1024 ** 3), 1)} GB",
+                },
+            )
+
+        admin_task = GuardAdminTaskService(admin_username=admin_username, db=db)
+
+        success = await admin_task.add_client_to_panel(user_input)
+
+        if not success:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "success": False,
+                    "message": f"{success}",
+                },
+            )
+        
+        crud.add_user_in_guard_table(db, user_input.email, admin_username)
+        admin_check.reduce_usage(user_input.total, user_input.total)
+        return ResponseModel(
+            success=True,
+            message="User added successfully",
+        )
+        
     if panel.panel_type == "3x-ui":
         if not admin_check.admin_is_active():
             logger.warning(f"Inactive admin attempted to add user: {admin_username}")
@@ -438,7 +588,78 @@ async def update_a_user(
 
     _admin = crud.get_admin_by_username(db, admin_username)
     panel = crud.get_panel_by_name(db, _admin.panel)
+    
+    if not panel:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "success": False,
+                "message": "Panel not found",
+            },
+        )
+    
     admin_check = AdminLimiter(admin_username=admin_username, db=db)
+
+    if panel.panel_type == "guard":
+        if not admin_check.admin_is_active():
+            logger.warning(f"Inactive admin attempted to update user: {admin_username}")
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "success": False,
+                    "message": "Your admin account is inactive. Contact support.",
+                },
+            )
+        elif not admin_check.check_traffic_limit(user_input.total):
+            logger.warning(
+                f"Admin {admin_username} exceeded traffic limit when updating user: {user_input.email}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "success": False,
+                    "message": f"Insufficient traffic to update this user, your limit: {round((_admin.traffic) / (1024 ** 3), 1)} GB",
+                },
+            )
+
+        admin_task = GuardAdminTaskService(admin_username=admin_username, db=db)
+        clients = await admin_task.get_all_users()
+        user_info = next((client for client in clients if client.get("id") == int(uuid)), None)
+
+        if not user_info:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "success": False,
+                    "message": "User not found",
+                },
+            )
+
+        extra_traffic = (
+            user_input.total - user_info.get("totalGB", 0)
+            if user_input.total > user_info.get("totalGB", 0)
+            else 0
+        )
+
+        update_user = await admin_task.update_client_in_panel(user_info.get("username"), user_input)
+
+        if not update_user:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "success": False,
+                    "message": "Failed to update user",
+                },
+            )
+
+        admin_check.reduce_usage(user_input.total, extra_traffic)
+        increase_traffic = user_info.get("totalGB", 0) - user_input.total 
+        admin_check.increase_usage(increase_traffic if increase_traffic > 0 else 0)
+        
+        return ResponseModel(
+            success=True,
+            message="User updated successfully",
+        )
 
     if panel.panel_type == "3x-ui":
         if not admin_check.admin_is_active():
@@ -620,9 +841,73 @@ async def reset_a_user_usage(
     """This function resets a user's usage statistics in the panel associated with the given admin."""
 
     _admin = crud.get_admin_by_username(db, admin_username)
-    panel = crud.get_panel_by_name(db, _admin.panel)
+    panel = crud.get_panel_by_name(db, _admin.panel)    
+    if not panel:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "success": False,
+                "message": "Panel not found",
+            },
+        )
     admin_check = AdminLimiter(admin_username=admin_username, db=db)
 
+    if panel.panel_type == "guard":
+        if not admin_check.admin_is_active():
+            logger.warning(
+                f"Inactive admin attempted to reset user usage: {admin_username}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "success": False,
+                    "message": "Your admin account is inactive. Contact support.",
+                },
+            )
+
+        admin_task = GuardAdminTaskService(admin_username=admin_username, db=db)
+        clients = await admin_task.get_all_users()
+        user_info = next(
+            (
+                client for client in clients
+                if client.get("username") == email
+            ),
+            None
+        )
+
+        if not user_info:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "success": False,
+                    "message": "User not found",
+                },
+            )
+
+        if not admin_check.check_traffic_limit(user_info.get("totalGB", 0)):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "success": False,
+                    "message": f"Insufficient traffic to reset usage for this user, your limit: {round((_admin.traffic) / (1024 ** 3), 1)} GB",
+                },
+            )
+        usage_user_traffic = user_info.get("usedData", 0)
+        reset_usage = await admin_task.reset_client_usage(email)
+
+        if not reset_usage:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "success": False,
+                    "message": "Failed to reset user usage",
+                },
+            )
+        admin_check.reduce_usage(user_info.get("totalGB", 0), usage_user_traffic)
+        return ResponseModel(
+            success=True,
+            message="User usage reset successfully",
+        )
     if panel.panel_type == "3x-ui":
         if not admin_check.admin_is_active():
             logger.warning(
@@ -791,7 +1076,75 @@ async def delete_a_user(admin_username: str, uuid: str, db: Session) -> bool:
 
     _admin = crud.get_admin_by_username(db, admin_username)
     panel = crud.get_panel_by_name(db, _admin.panel)
+    
+    if not panel:
+        return False
+    
     admin_check = AdminLimiter(admin_username=admin_username, db=db)
+
+    if panel.panel_type == "guard":
+        if not admin_check.admin_is_active():
+            logger.warning(f"Inactive admin attempted to delete user: {admin_username}")
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "success": False,
+                    "message": "Your admin account is inactive. Contact support.",
+                },
+            )
+
+        admin_task = GuardAdminTaskService(admin_username=admin_username, db=db)
+        users = await admin_task.get_all_users()
+
+        user_info = None
+        for user in users:
+            if user.get("id") == int(uuid):
+                user_info = user
+                break
+
+        if not user_info:
+            logger.warning(
+                f"User with uuid {uuid} not found for deletion by admin {admin_username}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "success": False,
+                    "message": "User not found",
+                },
+            )
+
+        total = user_info.get("totalGB", 0)
+        used = user_info.get("usedData", 0)
+        traffic = total - used
+        if traffic < 0:
+            traffic = 0
+
+        delete_user = await admin_task.delete_client_from_panel(user_info.get("username"))
+
+        if not delete_user:
+            logger.error(f"Failed to delete user {uuid} by admin {admin_username}")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "success": False,
+                    "message": "Failed to delete user",
+                },
+            )
+
+        crud.remove_user_from_guard_table(db, user_info["username"])
+
+        admin_check.increase_usage(traffic)
+        logger.info(
+            f"User {user_info['email']} deleted by admin {admin_username}, traffic returned: {round(traffic / (1024 ** 3), 2)} GB"
+        )
+
+        crud.remove_user_from_sanaei_table(db, user_info["email"])
+        return ResponseModel(
+            success=True,
+            message="User deleted successfully",
+        )      
+
 
     if panel.panel_type == "3x-ui":
         if not admin_check.admin_is_active():

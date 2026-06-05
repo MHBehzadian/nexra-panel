@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { AlertCircle, Loader2, Info } from 'lucide-react'
 
-const PANEL_TYPES = ['3x-ui', 'tx-ui', 'marzban']
+const PANEL_TYPES = ['3x-ui', 'tx-ui', 'marzban', 'guard']
 
 interface PanelFormDialogProps {
     isOpen: boolean
@@ -73,7 +73,7 @@ export function PanelFormDialog({
             setValue('is_active', panel.is_active)
             setValue('token', '')
 
-            if (panel.panel_type === '3x-ui') {
+            if (panel.panel_type === '3x-ui' || panel.panel_type === 'guard') {
                 setValue('username', 'none')
                 setValue('password', 'none')
             } else {
@@ -87,7 +87,7 @@ export function PanelFormDialog({
     }, [panel, isOpen, setValue, reset])
 
     useEffect(() => {
-        if (panelType === '3x-ui') {
+        if (panelType === '3x-ui' || panelType === 'guard') {
             setValue('username', 'none')
             setValue('password', 'none')
         } else {
@@ -233,7 +233,7 @@ export function PanelFormDialog({
                         </p>
                     </div>
 
-                    {panelType === '3x-ui' ? (
+                    {['3x-ui', 'guard'].includes(panelType) ? (
                         <>
                             <div className="space-y-2">
                                 <Label htmlFor="token">Panel Token *</Label>
@@ -247,7 +247,7 @@ export function PanelFormDialog({
                                     <p className="text-sm text-destructive">{errors.token.message}</p>
                                 )}
                                 <p className="text-xs text-muted-foreground">
-                                    For 3x-ui panels, provide the API token
+                                    For 3x-ui and guard panels, provide the API token
                                 </p>
                             </div>
                             <input type="hidden" value="none" {...register('username')} />
