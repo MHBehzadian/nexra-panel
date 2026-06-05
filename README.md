@@ -28,7 +28,7 @@ A comprehensive admin dashboard system for managing X-UI panels with role-based 
 - [x] **3x-ui**  
 - [x] **Tx-ui**   
 - [x] **Marzban**  
-- [ ] **PasarGuard**  
+- [x] **Guard**  
 - [ ] **S-ui**   
 
 ## ✨ Features
