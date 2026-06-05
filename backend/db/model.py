@@ -49,3 +49,10 @@ class SanaeiUsers(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     owner = Column(String, nullable=False)
+
+class GuardUsers(Base):
+    __tablename__ = "guard_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    owner = Column(String, nullable=False)

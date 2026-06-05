@@ -195,3 +195,18 @@ def get_user_from_sanaei_table(db: Session, username: str) -> SanaeiUsers | None
 
 def get_all_users_from_sanaei_table(db: Session) -> list[SanaeiUsers] | None:
     return db.query(SanaeiUsers).all()
+
+def add_user_in_guard_table(db: Session, username: str, owner: str) -> None:
+    user = SanaeiUsers(username=username, owner=owner)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+def remove_user_from_guard_table(db: Session, username: str) -> None:
+    user = db.query(SanaeiUsers).filter(SanaeiUsers.username == username).first()
+    if user:
+        db.delete(user)
+        db.commit()
+
+def get_user_from_guard_table(db:Session):
+    return db.query(SanaeiUsers).all()
