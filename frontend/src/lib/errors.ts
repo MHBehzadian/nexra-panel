@@ -39,6 +39,9 @@ const EXACT: Record<string, string> = {
     'No users found': 'کاربری یافت نشد',
     'Your admin account is inactive. Contact support.': 'حساب ادمین شما غیرفعال است. با پشتیبانی تماس بگیرید.',
     'This email is reserved by another admins': 'این ایمیل قبلاً توسط ادمین دیگری گرفته شده است',
+    'This username already exists on the panel': 'این نام کاربری از قبل روی پنل وجود دارد',
+    'Failed to create the user on the panel. Check the username and panel connection.':
+        'ساخت کاربر روی پنل ناموفق بود. نام کاربری و اتصال پنل را بررسی کنید.',
     'User not found': 'کاربر پیدا نشد',
     'Failed to update user': 'به‌روزرسانی کاربر ناموفق بود',
     'Failed to reset user usage': 'ریست مصرف کاربر ناموفق بود',
