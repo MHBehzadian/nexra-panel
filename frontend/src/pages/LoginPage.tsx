@@ -31,7 +31,7 @@ const styles = `
 .nx-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px 1px rgba(46,230,255,.55)}
 .nx-logo{display:flex;justify-content:center;margin-bottom:18px}
 .nx-logo img{width:132px;height:auto;filter:drop-shadow(0 0 18px rgba(46,230,255,.22))}
-.nx-title{font-family:var(--mono);font-weight:500;font-size:27px;letter-spacing:.02em;line-height:1.1;margin-bottom:10px}
+.nx-title{font-family:var(--mono);font-weight:500;font-size:21px;letter-spacing:.02em;line-height:1.1;margin-bottom:10px}
 .nx-title .cur{color:var(--accent);animation:nxblink 1.2s steps(1) infinite}
 @keyframes nxblink{50%{opacity:0}}
 .nx-sub{font-size:13px;color:var(--mut);line-height:1.55;margin-bottom:26px}
