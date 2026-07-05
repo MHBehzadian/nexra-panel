@@ -60,11 +60,7 @@ export function LoginPage() {
             }
         } catch (error: any) {
             console.error('Login error:', error)
-            setServerError(
-                error?.response?.data?.message ||
-                error?.message ||
-                'Failed to login. Please check your credentials.'
-            )
+            setServerError(error?.message || 'ورود ناموفق بود. اطلاعات ورود را بررسی کنید.')
         }
     }
 
