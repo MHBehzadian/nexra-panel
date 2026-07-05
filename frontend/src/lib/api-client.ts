@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
 import { getToken, removeToken } from './auth'
+import { formatApiError } from './errors'
 
 let apiClient: AxiosInstance | null = null
 
@@ -51,6 +52,8 @@ function getBaseURL(): string {
                 removeToken()
                 window.location.href = '/login'
             }
+            // Surface a human-readable "Error <code> — <reason>" everywhere
+            error.message = formatApiError(error)
             return Promise.reject(error)
         }
     )
