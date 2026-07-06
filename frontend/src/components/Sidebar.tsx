@@ -5,6 +5,7 @@ import {
     Settings,
     LogOut,
     Zap,
+    HelpCircle,
     Sun,
     Moon,
     Server,
@@ -42,6 +43,12 @@ const navigationItems = [
         href: '/settings',
         icon: Settings,
         roles: ['superadmin'],
+    },
+    {
+        label: 'راهنما',
+        href: '/help',
+        icon: HelpCircle,
+        roles: ['admin', 'superadmin'],
     },
 ]
 

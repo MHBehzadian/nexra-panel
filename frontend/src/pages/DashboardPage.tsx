@@ -71,18 +71,18 @@ import { UserFormDialog } from './components/UserFormDialog'
 
 
 function lastOnlineInfo(onlineAt?: string | null): { online: boolean; text: string } {
-    if (!onlineAt) return { online: false, text: 'هیچ‌وقت آنلاین نشده' }
+    if (!onlineAt) return { online: false, text: 'Never online' }
     const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(onlineAt) ? onlineAt : onlineAt + 'Z'
     const t = new Date(iso).getTime()
     if (isNaN(t)) return { online: false, text: '—' }
     const diff = Date.now() - t
-    if (diff < 60000) return { online: true, text: 'آنلاین' }
+    if (diff < 60000) return { online: true, text: 'Online' }
     const m = Math.floor(diff / 60000)
-    if (m < 60) return { online: false, text: `${m} دقیقه پیش` }
+    if (m < 60) return { online: false, text: `${m}m ago` }
     const h = Math.floor(m / 60)
-    if (h < 24) return { online: false, text: `${h} ساعت پیش` }
+    if (h < 24) return { online: false, text: `${h}h ago` }
     const d = Math.floor(h / 24)
-    return { online: false, text: `${d} روز پیش` }
+    return { online: false, text: `${d}d ago` }
 }
 
 interface ExpandedRow {
@@ -837,7 +837,7 @@ function DetailsRow({
                 </TableCell>
                 <TableCell>
                     {online.online ? (
-                        <Badge className="bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">آنلاین</Badge>
+                        <Badge className="bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">Online</Badge>
                     ) : (
                         <Badge variant={user.status ? 'default' : 'destructive'}>
                             {user.status ? 'Active' : 'Inactive'}
@@ -868,8 +868,8 @@ function DetailsRow({
                         <div className="py-4 space-y-3">
                             <div className="flex items-center gap-2 text-xs">
                                 <Wifi className={cn('h-3.5 w-3.5', online.online ? 'text-emerald-500' : 'text-muted-foreground')} />
-                                <span className="text-muted-foreground">آخرین آنلاین:</span>
-                                <span dir="rtl">{online.text}</span>
+                                <span className="text-muted-foreground">Last online:</span>
+                                <span>{online.text}</span>
                             </div>
                             {subUrl && user.sub_id && (
                                 <div className="p-3 bg-background rounded-md border overflow-hidden">
@@ -983,7 +983,7 @@ function MobileUserCard({
                 {/* Right: Status & Chevron */}
                 <div className="flex flex-col items-end gap-1 shrink-0">
                     {online.online ? (
-                        <Badge className="text-xs bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">آنلاین</Badge>
+                        <Badge className="text-xs bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">Online</Badge>
                     ) : (
                         <Badge variant={user.status ? 'default' : 'destructive'} className="text-xs">
                             {user.status ? 'Active' : 'Inactive'}
@@ -1003,8 +1003,8 @@ function MobileUserCard({
                 <div className="border-t p-3 space-y-3 bg-muted/30">
                     <div className="flex items-center gap-2 text-xs">
                         <Wifi className={cn('h-3.5 w-3.5', online.online ? 'text-emerald-500' : 'text-muted-foreground')} />
-                        <span className="text-muted-foreground">آخرین آنلاین:</span>
-                        <span dir="rtl">{online.text}</span>
+                        <span className="text-muted-foreground">Last online:</span>
+                        <span>{online.text}</span>
                     </div>
                     {/* Subscription Link */}
                     {subUrl && user.sub_id && (

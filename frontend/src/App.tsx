@@ -7,6 +7,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { AdminsPage } from '@/pages/AdminsPage'
 import { PanelsPage } from '@/pages/PanelsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { HelpPage } from '@/pages/HelpPage'
 import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -57,6 +58,17 @@ function App() {
                         <ProtectedRoute>
                             <Layout>
                                 <SettingsPage />
+                            </Layout>
+                        </ProtectedRoute>
+                    }
+                />
+
+                <Route
+                    path="/help"
+                    element={
+                        <ProtectedRoute>
+                            <Layout>
+                                <HelpPage />
                             </Layout>
                         </ProtectedRoute>
                     }
