@@ -223,6 +223,7 @@ export interface ClientsOutput {
     username: string
     status: boolean
     is_online: boolean
+    online_at?: string | null
     data_limit: number
     used_data: number
     expiry_date: string | null

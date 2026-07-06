@@ -70,6 +70,21 @@ import { UserFormDialog } from './components/UserFormDialog'
     }
 
 
+function lastOnlineInfo(onlineAt?: string | null): { online: boolean; text: string } {
+    if (!onlineAt) return { online: false, text: 'هیچ‌وقت آنلاین نشده' }
+    const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(onlineAt) ? onlineAt : onlineAt + 'Z'
+    const t = new Date(iso).getTime()
+    if (isNaN(t)) return { online: false, text: '—' }
+    const diff = Date.now() - t
+    if (diff < 60000) return { online: true, text: 'آنلاین' }
+    const m = Math.floor(diff / 60000)
+    if (m < 60) return { online: false, text: `${m} دقیقه پیش` }
+    const h = Math.floor(m / 60)
+    if (h < 24) return { online: false, text: `${h} ساعت پیش` }
+    const d = Math.floor(h / 24)
+    return { online: false, text: `${d} روز پیش` }
+}
+
 interface ExpandedRow {
     [key: string]: boolean
 }
@@ -222,7 +237,7 @@ export function DashboardPage() {
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Total Panels</CardTitle>
-                                <Server className="h-4 w-4 text-purple-500" />
+                                <Server className="h-4 w-4 text-primary" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold">{dashboardData.panels.length}</div>
@@ -271,7 +286,7 @@ export function DashboardPage() {
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
-                            <HardDrive className="h-4 w-4 text-indigo-500" />
+                            <HardDrive className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
@@ -286,7 +301,7 @@ export function DashboardPage() {
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Disk Usage</CardTitle>
-                            <HardDrive className="h-4 w-4 text-pink-500" />
+                            <HardDrive className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
@@ -301,7 +316,7 @@ export function DashboardPage() {
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">CPU Usage</CardTitle>
-                            <Zap className="h-4 w-4 text-orange-500" />
+                            <Zap className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">{dashboardData.system.cpu_percent.toFixed(1)}%</div>
@@ -368,7 +383,7 @@ export function DashboardPage() {
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Expiry Date</CardTitle>
-                            <Clock className="h-4 w-4 text-blue-500" />
+                            <Clock className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
@@ -402,7 +417,7 @@ export function DashboardPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-emerald-500">
-                                {dashboardData.users?.filter(u => u.is_online).length || 0}
+                                {dashboardData.users?.filter(u => lastOnlineInfo(u.online_at).online).length || 0}
                             </div>
                             <p className="text-xs text-muted-foreground">Currently connected</p>
                         </CardContent>
@@ -508,8 +523,8 @@ export function DashboardPage() {
                                 
                                 // Status filter
                                 if (statusFilter === 'all') return true
-                                if (statusFilter === 'online') return user.is_online
-                                if (statusFilter === 'active') return user.status && !user.is_online
+                                if (statusFilter === 'online') return lastOnlineInfo(user.online_at).online
+                                if (statusFilter === 'active') return user.status && !lastOnlineInfo(user.online_at).online
                                 if (statusFilter === 'inactive') return !user.status
                                 
                                 return true
@@ -765,6 +780,7 @@ function DetailsRow({
 }: DetailsRowProps) {
     const trafficUsed = user.used_data
     const trafficPercent = (trafficUsed / user.data_limit) * 100
+    const online = lastOnlineInfo(user.online_at)
 
     return (
         <>
@@ -820,8 +836,8 @@ function DetailsRow({
                     )}
                 </TableCell>
                 <TableCell>
-                    {user.is_online ? (
-                        <Badge className="bg-emerald-100 text-emerald-800">Online</Badge>
+                    {online.online ? (
+                        <Badge className="bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">آنلاین</Badge>
                     ) : (
                         <Badge variant={user.status ? 'default' : 'destructive'}>
                             {user.status ? 'Active' : 'Inactive'}
@@ -850,6 +866,11 @@ function DetailsRow({
                 <TableRow className="bg-muted/30">
                     <TableCell colSpan={6}>
                         <div className="py-4 space-y-3">
+                            <div className="flex items-center gap-2 text-xs">
+                                <Wifi className={cn('h-3.5 w-3.5', online.online ? 'text-emerald-500' : 'text-muted-foreground')} />
+                                <span className="text-muted-foreground">آخرین آنلاین:</span>
+                                <span dir="rtl">{online.text}</span>
+                            </div>
                             {subUrl && user.sub_id && (
                                 <div className="p-3 bg-background rounded-md border overflow-hidden">
                                     <div className="text-xs text-muted-foreground mb-1">Subscription Link:</div>
@@ -931,6 +952,7 @@ function MobileUserCard({
 }: MobileUserCardProps) {
     const trafficUsed = user.used_data
     const trafficPercent = (trafficUsed / user.data_limit) * 100
+    const online = lastOnlineInfo(user.online_at)
 
     return (
         <div className="border rounded-lg overflow-hidden">
@@ -960,8 +982,8 @@ function MobileUserCard({
 
                 {/* Right: Status & Chevron */}
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                    {user.is_online ? (
-                        <Badge className="text-xs bg-emerald-100 text-emerald-800">Online</Badge>
+                    {online.online ? (
+                        <Badge className="text-xs bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">آنلاین</Badge>
                     ) : (
                         <Badge variant={user.status ? 'default' : 'destructive'} className="text-xs">
                             {user.status ? 'Active' : 'Inactive'}
@@ -979,6 +1001,11 @@ function MobileUserCard({
             {/* Expanded View */}
             {isExpanded && (
                 <div className="border-t p-3 space-y-3 bg-muted/30">
+                    <div className="flex items-center gap-2 text-xs">
+                        <Wifi className={cn('h-3.5 w-3.5', online.online ? 'text-emerald-500' : 'text-muted-foreground')} />
+                        <span className="text-muted-foreground">آخرین آنلاین:</span>
+                        <span dir="rtl">{online.text}</span>
+                    </div>
                     {/* Subscription Link */}
                     {subUrl && user.sub_id && (
                         <div className="p-3 bg-background rounded-md border overflow-hidden">

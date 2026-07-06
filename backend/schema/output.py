@@ -44,6 +44,7 @@ class ClientsOutput(BaseModel):
     email: Optional[str] = None
     status: bool = True
     is_online: bool = False
+    online_at: Optional[str] = None
     data_limit: int
     used_data: int
     expiry_date: Optional[datetime] = None

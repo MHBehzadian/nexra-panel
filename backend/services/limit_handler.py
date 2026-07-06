@@ -37,3 +37,15 @@ class AdminLimiter:
     def increase_usage(self, traffic: int) -> None:
         if self.admin.delete_return_traffic:
             crud.increase_admin_traffic(self.db, self.admin, traffic)
+
+    def apply_update(self, old_total: int, new_total: int) -> None:
+        """Adjust the admin's remaining traffic by the change in a user's data limit.
+
+        Only the increase is charged against the admin; a decrease is refunded
+        only when the admin returns traffic on update. This keeps the accounting
+        symmetric (e.g. 80 -> 20 -> 100 nets to a 20 GB charge, not 80)."""
+        delta = new_total - old_total
+        if delta > 0:
+            crud.reduce_admin_traffic(self.db, self.admin, delta)
+        elif delta < 0 and self.admin.update_return_traffic:
+            crud.increase_admin_traffic(self.db, self.admin, -delta)
