@@ -49,3 +49,10 @@ class AdminLimiter:
             crud.reduce_admin_traffic(self.db, self.admin, delta)
         elif delta < 0 and self.admin.update_return_traffic:
             crud.increase_admin_traffic(self.db, self.admin, -delta)
+
+    def charge(self, amount: int) -> None:
+        """Unconditionally deduct traffic from the admin's budget. Used on reset:
+        resetting a user's usage frees the already-consumed traffic for re-use,
+        so that amount is charged back regardless of the return-traffic flags."""
+        if amount > 0:
+            crud.reduce_admin_traffic(self.db, self.admin, amount)

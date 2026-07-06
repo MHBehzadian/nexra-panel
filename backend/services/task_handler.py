@@ -1007,7 +1007,11 @@ async def reset_a_user_usage(
                     "message": "User not found",
                 },
             )
-        if not admin_check.check_traffic_limit(user_info.get("data_limit", 0)):
+        freed = min(
+            int(user_info.get("used_traffic") or 0),
+            int(user_info.get("data_limit") or 0),
+        )
+        if freed > 0 and not admin_check.check_traffic_limit(freed):
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={
@@ -1015,7 +1019,6 @@ async def reset_a_user_usage(
                     "message": f"Insufficient traffic to reset usage for this user, your limit: {round((_admin.traffic) / (1024 ** 3), 1)} GB",
                 },
             )
-        usage_user_traffic = user_info.get("used_traffic", 0)
         reset_usage = await admin_task.reset_user_usage_in_panel(email)
 
         if not reset_usage:
@@ -1026,7 +1029,7 @@ async def reset_a_user_usage(
                     "message": "Failed to reset user usage",
                 },
             )
-        admin_check.reduce_usage(user_info.get("data_limit", 0), usage_user_traffic)
+        admin_check.charge(freed)
         return ResponseModel(
             success=True,
             message="User usage reset successfully",
