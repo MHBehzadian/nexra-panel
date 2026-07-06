@@ -764,10 +764,12 @@ async def update_a_user(
 
         old_total = int(user_info.get("data_limit") or 0)
         new_total = int(user_input.total or 0)
-        delta = new_total - old_total
+        used = int(user_info.get("used_traffic") or 0)
+        # Charge only the increase in committed traffic (committed = max(limit, used)).
+        # Already-consumed traffic is never refunded when lowering the limit.
+        charge = max(new_total, used) - max(old_total, used)
 
-        # Only the increase is charged against the admin's quota (not the full new limit)
-        if delta > 0 and not admin_check.check_traffic_limit(delta):
+        if charge > 0 and not admin_check.check_traffic_limit(charge):
             logger.warning(
                 f"Admin {admin_username} exceeded traffic limit when updating user: {user_input.email}"
             )
@@ -792,7 +794,7 @@ async def update_a_user(
                 },
             )
 
-        admin_check.apply_update(old_total, new_total)
+        admin_check.apply_update(old_total, new_total, used)
         return ResponseModel(
             success=True,
             message="User updated successfully",
