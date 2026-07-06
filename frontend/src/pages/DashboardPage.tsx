@@ -331,7 +331,7 @@ export function DashboardPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
-                            <Zap className="h-4 w-4 text-yellow-500" />
+                            <Zap className="h-4 w-4 text-primary" />
                             News & Updates
                         </CardTitle>
                     </CardHeader>
@@ -342,7 +342,7 @@ export function DashboardPage() {
                                 className="flex items-start gap-2 p-2 rounded-md hover:bg-muted/20 transition-colors duration-150"
                                 style={{ direction: /[\u0600-\u06FF]/.test(newsItem) ? 'rtl' : 'ltr' }}
                             >
-                                <Zap className="h-4 w-4 text-yellow-500 mt-1 flex-shrink-0" />
+                                <Zap className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
                                 <div className="text-sm text-muted-foreground break-words">{newsItem}</div>
                             </div>
                         ))}
@@ -359,7 +359,7 @@ export function DashboardPage() {
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Remaining Traffic</CardTitle>
-                            <Zap className="h-4 w-4 text-yellow-500" />
+                            <Zap className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
@@ -427,7 +427,7 @@ export function DashboardPage() {
 
             {/* Advertisement Card */}
             {dashboardData?.ads && dashboardData.ads.text && (
-                <Card className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/20 dark:to-orange-950/20 border-yellow-200 dark:border-yellow-800 relative">
+                <Card className="bg-primary/5 border-primary/30 relative">
                     <CardContent className="p-4 pt-8">
                         <a
                             href={dashboardData.ads.link || '#'}
@@ -438,16 +438,16 @@ export function DashboardPage() {
                             <div className="flex flex-col gap-2" dir="rtl">
                                 <div className="flex-1 min-w-0" dir="rtl">
                                     {dashboardData.ads.title && (
-                                        <h3 className="font-bold text-yellow-900 dark:text-yellow-100 text-sm mb-1 group-hover:text-yellow-700 dark:group-hover:text-yellow-200 transition-colors" dir="rtl">
+                                        <h3 className="font-bold text-primary text-sm mb-1 group-hover:text-primary/80 transition-colors" dir="rtl">
                                             {dashboardData.ads.title}
                                         </h3>
                                     )}
-                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors" dir="rtl">
+                                    <p className="text-sm text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors" dir="rtl">
                                         {dashboardData.ads.text}
                                     </p>
                                     {dashboardData.ads.button && (
                                         <div className="mt-3 flex justify-start">
-                                            <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white text-sm font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105" dir="rtl">
+                                            <span className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold rounded-lg transition-all duration-200 transform hover:scale-105" dir="rtl">
                                                 <ExternalLink className="h-4 w-4" />
                                                 {dashboardData.ads.button}
                                             </span>
