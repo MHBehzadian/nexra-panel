@@ -16,6 +16,7 @@ import {
     Clock,
     Wifi,
     Copy,
+    Check,
     QrCode,
     Search,
     Power,
@@ -83,6 +84,42 @@ function lastOnlineInfo(onlineAt?: string | null): { online: boolean; text: stri
     if (h < 24) return { online: false, text: `${h}h ago` }
     const d = Math.floor(h / 24)
     return { online: false, text: `${d}d ago` }
+}
+
+function CopyButton({
+    text,
+    label,
+    iconClassName = 'h-4 w-4 mr-2',
+    className,
+    onClickCapture,
+}: {
+    text: string
+    label: string
+    iconClassName?: string
+    className?: string
+    onClickCapture?: (e: React.MouseEvent) => void
+}) {
+    const [copied, setCopied] = useState(false)
+    return (
+        <Button
+            size="sm"
+            variant="outline"
+            className={cn(
+                'transition-colors',
+                copied && 'border-emerald-500 text-emerald-500 hover:text-emerald-500',
+                className
+            )}
+            onClick={(e) => {
+                onClickCapture?.(e)
+                navigator.clipboard.writeText(text)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+            }}
+        >
+            {copied ? <Check className={iconClassName} /> : <Copy className={iconClassName} />}
+            {copied ? 'Copied!' : label}
+        </Button>
+    )
 }
 
 interface ExpandedRow {
@@ -887,17 +924,11 @@ function DetailsRow({
                                     Reset Usage
                                 </Button>
                                 {subUrl && user.sub_id && (
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(buildSubUrl(subUrl, user.sub_id))
-
-                                        }}
-                                    >
-                                        <Copy className="h-4 w-4 mr-2" />
-                                        Copy Subscription
-                                    </Button>
+                                    <CopyButton
+                                        text={buildSubUrl(subUrl, user.sub_id)}
+                                        label="Copy Subscription"
+                                        iconClassName="h-4 w-4 mr-2"
+                                    />
                                 )}
                                 {subUrl && user.sub_id && (
                                     <Button
@@ -1063,19 +1094,13 @@ function MobileUserCard({
                             Reset
                         </Button>
                         {subUrl && user.sub_id && (
-                            <Button
-                                size="sm"
-                                variant="outline"
+                            <CopyButton
+                                text={buildSubUrl(subUrl, user.sub_id)}
+                                label="Copy Sub"
+                                iconClassName="h-3 w-3 mr-1"
                                 className="flex-1 min-w-[80px]"
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    navigator.clipboard.writeText(buildSubUrl(subUrl, user.sub_id))
-
-                                }}
-                            >
-                                <Copy className="h-3 w-3 mr-1" />
-                                Copy Sub
-                            </Button>
+                                onClickCapture={(e) => e.stopPropagation()}
+                            />
                         )}
                         {subUrl && user.sub_id && (
                             <Button
