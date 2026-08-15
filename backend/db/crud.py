@@ -102,6 +102,19 @@ def increase_admin_traffic(db: Session, admin: Admins, added_traffic) -> None:
     db.commit()
 
 
+def grant_admin_traffic(db: Session, admin: Admins, added_traffic) -> None:
+    """Grant NEW quota to an admin (e.g. a paid top-up via the bot).
+
+    Unlike increase_admin_traffic (used by limit_handler.py to refund traffic a
+    user already had but didn't use — where initial_traffic must NOT move), this
+    also raises initial_traffic, since the admin's total granted quota actually
+    went up and the panel's Remaining/Initial display should reflect that.
+    """
+    admin.traffic += added_traffic
+    admin.initial_traffic += added_traffic
+    db.commit()
+
+
 def update_marzban_password(db: Session, admin: Admins, new_password: str) -> None:
     """Update the Nexra-side copy of the admin's Marzban password (plaintext, matching
     how add_admin/update_admin_values already store it — Marzban's own admin account

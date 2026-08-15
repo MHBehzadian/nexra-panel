@@ -51,7 +51,7 @@ async def topup_admin_traffic(
         )
 
     added_bytes = int(payload.added_gb * 1024**3)
-    crud.increase_admin_traffic(db, admin, added_bytes)
+    crud.grant_admin_traffic(db, admin, added_bytes)
     logger.info(
         f"Bot top-up: admin {admin.username} (telegram_id={payload.telegram_id}) "
         f"credited {payload.added_gb} GB"
