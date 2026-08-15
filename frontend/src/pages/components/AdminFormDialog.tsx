@@ -65,6 +65,7 @@ export function AdminFormDialog({
             delete_return_traffic: false,
             is_active: true,
             expiry_date: null,
+            telegram_id: null,
         },
     })
 
@@ -86,6 +87,7 @@ export function AdminFormDialog({
             setValue('update_return_traffic', admin.update_return_traffic)
             setValue('delete_return_traffic', admin.delete_return_traffic)
             setValue('is_active', admin.is_active)
+            setValue('telegram_id', admin.telegram_id ?? null)
             // If admin has an expiry_date (YYYY-MM-DD), convert to remaining days for the input
             if (admin.expiry_date) {
                 try {
@@ -254,6 +256,15 @@ export function AdminFormDialog({
     // Get current panel type
     const currentPanelType = panels.find(p => p.name === watch('panel'))?.panel_type
     const shouldShowInboundFields = watch('panel') && panelRequiresInboundFields(currentPanelType)
+
+    // Ensure telegram_id input can be cleared to `null`
+    const telegramIdRegister = register('telegram_id', {
+        setValueAs: (v: any) => {
+            if (v === '' || v === undefined || v === null) return null
+            const n = Number(v)
+            return Number.isNaN(n) ? null : Math.floor(n)
+        },
+    })
 
     // Ensure expiry input can be cleared to `null` (No Expiry)
     const expiryRegister = register('expiry_date', {
@@ -433,6 +444,25 @@ export function AdminFormDialog({
                         />
                         {errors.traffic && (
                             <p className="text-sm text-destructive">{errors.traffic.message}</p>
+                        )}
+                    </div>
+
+                    {/* Telegram ID - links this admin to the top-up bot */}
+                    <div className="space-y-2">
+                        <Label htmlFor="telegram_id">Telegram ID (top-up bot)</Label>
+                        <Input
+                            id="telegram_id"
+                            type="number"
+                            step="1"
+                            placeholder="e.g. 123456789"
+                            disabled={isSubmitting}
+                            {...telegramIdRegister}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Numeric Telegram user ID. Lets this admin top up their own traffic via the bot.
+                        </p>
+                        {errors.telegram_id && (
+                            <p className="text-sm text-destructive">{errors.telegram_id.message as string}</p>
                         )}
                     </div>
 

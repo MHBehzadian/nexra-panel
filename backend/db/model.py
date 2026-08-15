@@ -20,6 +20,7 @@ class Admins(Base):
     delete_return_traffic = Column(Boolean, default=False)
     expiry_date = Column(DateTime, nullable=True)
     inbound_flow = Column(String, nullable=True)
+    telegram_id = Column(BigInteger, unique=True, nullable=True, index=True)
 
 
 class Panels(Base):

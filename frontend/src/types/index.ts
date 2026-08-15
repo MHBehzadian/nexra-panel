@@ -92,6 +92,10 @@ export const adminSchema = z.object({
         .union([z.string(), z.number()])
         .nullable()
         .optional(),
+
+    telegram_id: z
+        .union([z.number(), z.null()])
+        .optional(),
 })
     .superRefine((val, ctx) => {
         // If panel is 3x-ui, flow must be provided (not null/empty)
@@ -119,6 +123,7 @@ export interface AdminOutput {
     update_return_traffic: boolean | false
     delete_return_traffic: boolean | false
     expiry_date: string | null
+    telegram_id?: number | null
 }
 
 // Panel Form

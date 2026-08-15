@@ -21,6 +21,7 @@ class AdminOutput(BaseModel):
     update_return_traffic: bool
     delete_return_traffic: bool
     expiry_date: Optional[datetime]
+    telegram_id: Optional[int] = None
 
     class Config:
         from_attributes = True
