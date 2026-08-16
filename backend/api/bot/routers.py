@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from backend.schema.output import ResponseModel, AdminOutput
+from backend.schema.output import ResponseModel, AdminOutput, AdminCredentialsOutput
 from backend.schema._input import BotTopupInput, BotChangePasswordInput
 from backend.db import crud
 from backend.db.engin import get_db
@@ -32,6 +32,22 @@ async def get_admin_by_telegram_id(
         success=True,
         message="Admin retrieved successfully",
         data=AdminOutput.from_orm(admin),
+    )
+
+
+@router.get(
+    "/admins/credentials",
+    description="List every admin's current Marzban password (bulk export for the superadmin)",
+)
+async def list_admin_credentials(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_bot_api_key),
+):
+    admins = [a for a in crud.get_all_admins(db) if a.marzban_password]
+    return ResponseModel(
+        success=True,
+        message="Credentials retrieved successfully",
+        data=[AdminCredentialsOutput.from_orm(a) for a in admins],
     )
 
 

@@ -27,6 +27,18 @@ class AdminOutput(BaseModel):
         from_attributes = True
 
 
+class AdminCredentialsOutput(BaseModel):
+    """Deliberately minimal — separate from AdminOutput so the Marzban password
+    never leaks into any response except this one dedicated bulk-export call."""
+
+    username: str
+    telegram_id: Optional[int] = None
+    marzban_password: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class PanelOutput(BaseModel):
     id: int
     panel_type: str
