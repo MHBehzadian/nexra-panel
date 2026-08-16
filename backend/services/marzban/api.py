@@ -191,3 +191,15 @@ class APIService:
             headers=self.headers,
         )
         return response.status_code
+
+    async def update_admin_password(self, admin_username: str, new_password: str) -> int:
+        """Change another Marzban admin's password. Requires this APIService to be
+        logged in as a sudo admin (self.username/self.password) — Marzban rejects
+        this call from a non-sudo admin, even one modifying its own account."""
+        await self._login()
+        response = self.session.put(
+            f"{self.url}api/admin/{admin_username}",
+            headers=self.headers,
+            json={"password": new_password},
+        )
+        return response.status_code
