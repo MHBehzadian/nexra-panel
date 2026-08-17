@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.schema.output import ResponseModel, AdminOutput, AdminCredentialsOutput
@@ -48,6 +49,53 @@ async def list_admin_credentials(
         success=True,
         message="Credentials retrieved successfully",
         data=[AdminCredentialsOutput.from_orm(a) for a in admins],
+    )
+
+
+@router.post(
+    "/admins/sync-telegram-ids",
+    description="Fill in missing Telegram IDs for Nexra admins from Marzban's own admin records",
+)
+async def sync_telegram_ids_from_marzban(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_bot_api_key),
+):
+    updated: list[dict] = []
+    skipped_conflicts: list[str] = []
+
+    marzban_panels = [p for p in crud.get_all_panels(db) if p.panel_type == "marzban"]
+    for panel in marzban_panels:
+        sudo_api = MarzbanAPI(url=panel.url, username=panel.username, password=panel.password)
+        try:
+            marzban_admins = await sudo_api.get_admins()
+        except Exception as e:
+            logger.error(f"Failed to fetch admins from Marzban panel {panel.name}: {e}")
+            continue
+
+        marzban_by_username = {a.get("username"): a for a in marzban_admins}
+        nexra_admins = [a for a in crud.get_all_admins(db) if a.panel == panel.name]
+
+        for admin in nexra_admins:
+            if admin.telegram_id:
+                continue  # never overwrite an ID already set (manually or otherwise)
+            m = marzban_by_username.get(admin.username)
+            marzban_tid = m.get("telegram_id") if m else None
+            if not marzban_tid:
+                continue
+
+            admin.telegram_id = marzban_tid
+            try:
+                db.commit()
+                updated.append({"username": admin.username, "telegram_id": marzban_tid})
+            except IntegrityError:
+                db.rollback()
+                skipped_conflicts.append(admin.username)
+
+    logger.info(f"Telegram ID sync from Marzban: {len(updated)} updated, {len(skipped_conflicts)} conflicts")
+    return ResponseModel(
+        success=True,
+        message=f"{len(updated)} admin(s) updated",
+        data={"updated": updated, "skipped_conflicts": skipped_conflicts},
     )
 
 

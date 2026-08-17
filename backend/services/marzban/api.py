@@ -203,3 +203,12 @@ class APIService:
             json={"password": new_password},
         )
         return response.status_code
+
+    async def get_admins(self) -> list[dict]:
+        """List every admin as Marzban itself has them recorded (username,
+        telegram_id, is_sudo, ...). Requires sudo credentials."""
+        await self._login()
+        response = self.session.get(f"{self.url}api/admins", headers=self.headers)
+        if response.status_code != 200:
+            return []
+        return response.json()
