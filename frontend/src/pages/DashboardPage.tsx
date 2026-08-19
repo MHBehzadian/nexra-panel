@@ -225,12 +225,14 @@ export function DashboardPage() {
 
     const handleToggleStatus = async (user: ClientsOutput) => {
         try {
-            // Toggle status and update user
+            // Toggle status only: the expiry timestamp is forwarded untouched
+            // (as epoch ms, not a date string) so enabling/disabling a user
+            // never moves their expiry date.
             await userAPI.updateUser(
                 user.uuid || '0',
                 user.username,
                 user.data_limit / (1024 ** 3), // Convert back to GB
-                user.expiry_date_unix ? new Date(user.expiry_date_unix).toISOString().slice(0, 10) : null,
+                user.expiry_date_unix || null,
                 user.sub_id || '',
                 !user.status, // Toggle status
                 user.flow || '',
@@ -736,6 +738,7 @@ export function DashboardPage() {
                     setSelectedUser(null)
                 }}
                 user={selectedUser}
+                existingUsernames={(dashboardData?.users || []).map((u) => u.username)}
             />
 
             {/* Delete Confirmation Dialog */}

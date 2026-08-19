@@ -212,7 +212,12 @@ export function AdminFormDialog({
                 const d = new Date()
                 d.setHours(0, 0, 0, 0)
                 d.setDate(d.getDate() + Math.max(0, Math.floor(data.expiry_date)))
-                expiryForSubmit = d.toISOString().slice(0, 10)
+                // Format in local time: toISOString() would shift the date back
+                // a day for every timezone ahead of UTC.
+                const year = d.getFullYear()
+                const month = String(d.getMonth() + 1).padStart(2, '0')
+                const day = String(d.getDate()).padStart(2, '0')
+                expiryForSubmit = `${year}-${month}-${day}`
             } else {
                 expiryForSubmit = String(data.expiry_date)
             }
