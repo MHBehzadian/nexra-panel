@@ -45,6 +45,24 @@ def get_admin_by_telegram_id(db: Session, telegram_id: int):
     return db.query(Admins).filter(Admins.telegram_id == telegram_id).first()
 
 
+def get_admins_by_telegram_id(db: Session, telegram_id: int) -> list[Admins]:
+    """Every admin (panel) owned by this Telegram account — one person can own several."""
+    return db.query(Admins).filter(Admins.telegram_id == telegram_id).all()
+
+
+def get_owned_admin(db: Session, telegram_id: int, username: str):
+    """One specific panel, but only if this Telegram account actually owns it.
+
+    Matching on both columns is what stops a caller from naming someone else's
+    panel and having it charged or re-passworded.
+    """
+    return (
+        db.query(Admins)
+        .filter(Admins.telegram_id == telegram_id, Admins.username == username)
+        .first()
+    )
+
+
 def change_admin_status(db: Session, admin_id: int) -> bool:
     admin = db.query(Admins).filter(Admins.id == admin_id).first()
     if admin:

@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.schema.output import ResponseModel, AdminOutput, AdminCredentialsOutput
-from backend.schema._input import BotTopupInput, BotChangePasswordInput
+from backend.schema._input import BotTopupInput, BotChangePasswordInput, BotGrantInput
 from backend.db import crud
 from backend.db.engin import get_db
 from backend.auth.auth import verify_bot_api_key
@@ -14,25 +14,70 @@ from backend.utils.logger import logger
 router = APIRouter(prefix="/bot", tags=["Bot"])
 
 
-@router.get("/admin/{telegram_id}", description="Look up an admin by their linked Telegram ID")
-async def get_admin_by_telegram_id(
+def _not_linked():
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"success": False, "message": "No admin is linked to this Telegram account"},
+    )
+
+
+def _resolve_target(db: Session, telegram_id: int, username: str | None):
+    """Pick which of this person's panels an action applies to.
+
+    Returns (admin, error_response) — exactly one of the two is set. Passing a
+    username that this Telegram account doesn't own is treated as not-found, so
+    the parameter can't be used to reach into someone else's panel.
+    """
+    admins = crud.get_admins_by_telegram_id(db, telegram_id)
+    if not admins:
+        return None, _not_linked()
+
+    if username:
+        admin = crud.get_owned_admin(db, telegram_id, username)
+        if not admin:
+            return None, _not_linked()
+        return admin, None
+
+    if len(admins) > 1:
+        return None, JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "success": False,
+                "message": "This Telegram account owns several panels; specify which one",
+            },
+        )
+    return admins[0], None
+
+
+@router.get(
+    "/admin/{telegram_id}",
+    description="Every panel linked to this Telegram account (empty list if none)",
+)
+async def get_admins_by_telegram_id(
     telegram_id: int,
     db: Session = Depends(get_db),
     _: None = Depends(verify_bot_api_key),
 ):
-    admin = crud.get_admin_by_telegram_id(db, telegram_id)
-    if not admin:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                "success": False,
-                "message": "No admin is linked to this Telegram account",
-            },
-        )
+    admins = crud.get_admins_by_telegram_id(db, telegram_id)
+    if not admins:
+        return _not_linked()
     return ResponseModel(
         success=True,
-        message="Admin retrieved successfully",
-        data=AdminOutput.from_orm(admin),
+        message="Admins retrieved successfully",
+        data=[AdminOutput.from_orm(a) for a in admins],
+    )
+
+
+@router.get("/admins", description="Every admin in the panel (superadmin overview)")
+async def list_all_admins(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_bot_api_key),
+):
+    admins = crud.get_all_admins(db)
+    return ResponseModel(
+        success=True,
+        message="Admins retrieved successfully",
+        data=[AdminOutput.from_orm(a) for a in admins],
     )
 
 
@@ -99,37 +144,51 @@ async def sync_telegram_ids_from_marzban(
     )
 
 
+def _credit(db: Session, admin, added_gb: float, note: str):
+    added_bytes = int(added_gb * 1024**3)
+    crud.grant_admin_traffic(db, admin, added_bytes)
+    logger.info(f"{note}: admin {admin.username} credited {added_gb} GB")
+    return ResponseModel(
+        success=True,
+        message="Traffic increased successfully",
+        data={
+            "username": admin.username,
+            "telegram_id": admin.telegram_id,
+            "added_gb": added_gb,
+            "new_traffic_bytes": admin.traffic,
+            "new_initial_traffic_bytes": admin.initial_traffic,
+        },
+    )
+
+
 @router.post("/admin/topup", description="Increase an admin's traffic balance")
 async def topup_admin_traffic(
     payload: BotTopupInput,
     db: Session = Depends(get_db),
     _: None = Depends(verify_bot_api_key),
 ):
-    admin = crud.get_admin_by_telegram_id(db, payload.telegram_id)
+    admin, error = _resolve_target(db, payload.telegram_id, payload.username)
+    if error:
+        return error
+    return _credit(db, admin, payload.added_gb, "Bot top-up")
+
+
+@router.post(
+    "/admin/grant",
+    description="Superadmin grants traffic to a panel by username (no Telegram link needed)",
+)
+async def grant_admin_traffic(
+    payload: BotGrantInput,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_bot_api_key),
+):
+    admin = crud.get_admin_by_username(db, payload.username)
     if not admin:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                "success": False,
-                "message": "No admin is linked to this Telegram account",
-            },
+            content={"success": False, "message": "No admin with that username"},
         )
-
-    added_bytes = int(payload.added_gb * 1024**3)
-    crud.grant_admin_traffic(db, admin, added_bytes)
-    logger.info(
-        f"Bot top-up: admin {admin.username} (telegram_id={payload.telegram_id}) "
-        f"credited {payload.added_gb} GB"
-    )
-    return ResponseModel(
-        success=True,
-        message="Traffic increased successfully",
-        data={
-            "telegram_id": payload.telegram_id,
-            "added_gb": payload.added_gb,
-            "new_traffic_bytes": admin.traffic,
-        },
-    )
+    return _credit(db, admin, payload.added_gb, "Superadmin grant")
 
 
 @router.post(
@@ -141,15 +200,9 @@ async def change_admin_marzban_password(
     db: Session = Depends(get_db),
     _: None = Depends(verify_bot_api_key),
 ):
-    admin = crud.get_admin_by_telegram_id(db, payload.telegram_id)
-    if not admin:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                "success": False,
-                "message": "No admin is linked to this Telegram account",
-            },
-        )
+    admin, error = _resolve_target(db, payload.telegram_id, payload.username)
+    if error:
+        return error
 
     panel = crud.get_panel_by_name(db, admin.panel)
     if not panel or panel.panel_type != "marzban":
@@ -161,9 +214,38 @@ async def change_admin_marzban_password(
             },
         )
 
+    # Refuse to touch the sudo account Nexra itself authenticates with. Changing
+    # it here would silently cut the panel off from Marzban entirely.
+    if admin.username == panel.username:
+        logger.warning(f"Refused bot password change for sudo account {admin.username}")
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "success": False,
+                "message": "This is the panel's own service account; its password can't be changed from the bot",
+            },
+        )
+
+    # Prove the requester knows the current password by authenticating to Marzban
+    # as that admin — the authoritative check, rather than trusting Nexra's copy.
+    verify_api = MarzbanAPI(url=panel.url, username=admin.username, password=payload.current_password)
+    try:
+        current_ok = await verify_api.test_connection()
+    except Exception as e:
+        logger.error(f"Marzban unreachable while verifying password for {admin.username}: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={"success": False, "message": f"Could not reach Marzban: {e}"},
+        )
+
+    if not current_ok:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"success": False, "message": "Current password is incorrect"},
+        )
+
     # panel.username/panel.password are the sudo Marzban credentials Nexra already
-    # uses for platform-level calls (see AdminTaskService.api_service_for_main_tasks)
-    # — only a sudo admin can change another admin's password in Marzban.
+    # uses for platform-level calls — only a sudo admin can change another admin's password.
     sudo_api = MarzbanAPI(url=panel.url, username=panel.username, password=panel.password)
     try:
         marzban_status = await sudo_api.update_admin_password(admin.username, payload.new_password)
@@ -190,12 +272,9 @@ async def change_admin_marzban_password(
         )
 
     crud.update_marzban_password(db, admin, payload.new_password)
-    logger.info(
-        f"Bot password change: admin {admin.username} (telegram_id={payload.telegram_id}) "
-        f"password updated in Marzban and Nexra"
-    )
+    logger.info(f"Bot password change: admin {admin.username} updated in Marzban and Nexra")
     return ResponseModel(
         success=True,
         message="Password updated successfully in Marzban and Nexra",
-        data={"telegram_id": payload.telegram_id, "username": admin.username},
+        data={"telegram_id": admin.telegram_id, "username": admin.username},
     )

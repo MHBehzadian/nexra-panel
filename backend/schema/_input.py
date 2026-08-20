@@ -76,11 +76,24 @@ class NewsInput(BaseModel):
 class BotTopupInput(BaseModel):
     telegram_id: int
     added_gb: float = Field(gt=0)
+    # Which of this person's panels to credit. Optional for backwards
+    # compatibility: when omitted, the call targets their only panel.
+    username: Optional[str] = None
 
 
 class BotChangePasswordInput(BaseModel):
     telegram_id: int
     new_password: str = Field(min_length=1)
+    current_password: str = Field(min_length=1)
+    username: Optional[str] = None
+
+
+class BotGrantInput(BaseModel):
+    """Superadmin granting traffic straight to a panel, by username — no
+    Telegram link required, so panels nobody has linked yet can still be topped up."""
+
+    username: str
+    added_gb: float = Field(gt=0)
 
 
 class SettingsInput(BaseModel):
