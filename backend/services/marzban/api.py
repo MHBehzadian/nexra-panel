@@ -195,12 +195,30 @@ class APIService:
     async def update_admin_password(self, admin_username: str, new_password: str) -> int:
         """Change another Marzban admin's password. Requires this APIService to be
         logged in as a sudo admin (self.username/self.password) — Marzban rejects
-        this call from a non-sudo admin, even one modifying its own account."""
+        this call from a non-sudo admin, even one modifying its own account.
+
+        Marzban's AdminModify body requires `is_sudo`, so a password-only payload
+        is rejected with 422. The admin's current record is read first and its
+        flags echoed back unchanged: guessing `is_sudo` here would silently
+        promote or demote the account being edited.
+        """
         await self._login()
+
+        current = next(
+            (a for a in await self.get_admins() if a.get("username") == admin_username), None
+        )
+        if current is None:
+            return 404
+
+        payload = {"password": new_password, "is_sudo": bool(current.get("is_sudo"))}
+        for field in ("telegram_id", "discord_webhook"):
+            if current.get(field) is not None:
+                payload[field] = current[field]
+
         response = self.session.put(
             f"{self.url}api/admin/{admin_username}",
             headers=self.headers,
-            json={"password": new_password},
+            json=payload,
         )
         return response.status_code
 

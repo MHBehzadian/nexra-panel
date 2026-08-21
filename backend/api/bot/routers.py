@@ -260,14 +260,18 @@ async def change_admin_marzban_password(
         logger.warning(
             f"Marzban rejected password change for admin {admin.username}: status {marzban_status}"
         )
+        hints = {
+            401: "Nexra's stored Marzban credentials for this panel are wrong or expired.",
+            403: "This panel's stored Marzban credentials are not a sudo admin.",
+            404: f"Marzban has no admin named '{admin.username}'.",
+            422: "Marzban rejected the request body — the panel and Marzban versions may disagree.",
+        }
+        detail = hints.get(marzban_status, "Unexpected response from Marzban.")
         return JSONResponse(
             status_code=status.HTTP_502_BAD_GATEWAY,
             content={
                 "success": False,
-                "message": (
-                    f"Marzban rejected the password change (status {marzban_status}). "
-                    "Make sure this panel's stored Marzban credentials belong to a sudo admin."
-                ),
+                "message": f"Marzban rejected the password change (status {marzban_status}). {detail}",
             },
         )
 
