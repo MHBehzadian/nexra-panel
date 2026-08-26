@@ -10,45 +10,39 @@ import logo from '@/assets/logo.png'
 const styles = `
 .nx-login-root{
   position:fixed; inset:0; z-index:0;
-  --bg:#0a0a0a; --panel:#111111; --line:#242424; --ink:#f2f2f2; --mut:#6f6f6f; --accent:#2ee6ff;
-  --mono:"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
-  background:var(--bg); color:var(--ink);
+  background:hsl(var(--background)); color:hsl(var(--foreground));
   display:flex; align-items:center; justify-content:center; padding:24px;
   -webkit-font-smoothing:antialiased;
-  background-image:radial-gradient(var(--line) 1px,transparent 1px);
-  background-size:22px 22px;
+  background-image:radial-gradient(ellipse 70% 50% at 50% -10%, hsl(var(--brand-blue) / .12), transparent 62%);
 }
 .nx-card{
-  width:100%; max-width:392px;
-  background:var(--panel); border:1px solid var(--line);
-  border-radius:20px; padding:38px 32px 26px;
+  width:100%; max-width:412px;
+  background:var(--surface-gradient);
+  border:1px solid hsl(var(--border));
+  border-radius:1.75rem; padding:36px 32px 24px;
+  box-shadow:inset 0 1px 0 0 var(--surface-highlight), var(--surface-shadow);
   position:relative; overflow:hidden;
 }
-.nx-card::before,.nx-card::after{content:"";position:absolute;width:9px;height:9px;border:1px solid var(--accent);opacity:.55}
-.nx-card::before{top:14px;left:14px;border-right:0;border-bottom:0}
-.nx-card::after{bottom:14px;right:14px;border-left:0;border-top:0}
-.nx-brand{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--mut);margin-bottom:24px}
-.nx-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px 1px rgba(46,230,255,.55)}
+.nx-brand{display:flex;align-items:center;gap:9px;font-size:11px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:hsl(var(--muted-foreground));margin-bottom:22px}
+.nx-dot{width:8px;height:8px;border-radius:50%;background:hsl(var(--brand-blue));box-shadow:0 0 12px 1px hsl(var(--brand-blue) / .5)}
 .nx-logo{display:flex;justify-content:center;margin-bottom:18px}
-.nx-logo img{width:132px;height:auto;filter:drop-shadow(0 0 18px rgba(46,230,255,.22))}
-.nx-title{font-family:var(--mono);font-weight:500;font-size:21px;letter-spacing:.02em;line-height:1.1;margin-bottom:10px}
-.nx-title .cur{color:var(--accent);animation:nxblink 1.2s steps(1) infinite}
-@keyframes nxblink{50%{opacity:0}}
-.nx-sub{font-size:13px;color:var(--mut);line-height:1.55;margin-bottom:26px}
-.nx-err{border:1px solid var(--accent);color:var(--accent);background:rgba(46,230,255,.07);border-radius:10px;padding:11px 13px;font-family:var(--mono);font-size:12.5px;margin-bottom:16px;line-height:1.55}
-.nx-form{display:flex;flex-direction:column;gap:16px}
+.nx-logo img{width:132px;height:auto}
+.nx-title{font-weight:900;font-size:28px;letter-spacing:-.02em;line-height:1.3;margin-bottom:8px;color:hsl(var(--foreground))}
+.nx-sub{font-size:14px;color:hsl(var(--muted-foreground));line-height:1.8;margin-bottom:24px}
+.nx-err{border:1px solid hsl(var(--destructive) / .35);color:hsl(var(--destructive));background:hsl(var(--destructive) / .08);border-radius:12px;padding:11px 13px;font-size:13px;margin-bottom:16px;line-height:1.6}
+.nx-form{display:flex;flex-direction:column;gap:18px}
 .nx-field{position:relative}
-.nx-field label{position:absolute;top:-7px;left:12px;background:var(--panel);padding:0 6px;font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
-.nx-field input{width:100%;background:transparent;border:1px solid var(--line);border-radius:11px;padding:15px 14px;color:var(--ink);font-family:var(--mono);font-size:14px;letter-spacing:.02em;transition:border-color .15s ease}
-.nx-field input:focus{outline:none;border-color:var(--accent)}
-.nx-field input::placeholder{color:#3a3a3a}
-.nx-fielderr{color:var(--accent);font-family:var(--mono);font-size:11px;margin-top:6px}
-.nx-btn{margin-top:6px;width:100%;background:var(--ink);color:#000;border:0;border-radius:11px;padding:16px;font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;cursor:pointer;transition:transform .08s ease,background .15s ease}
-.nx-btn:hover{background:#fff}
-.nx-btn:active{transform:translateY(1px)}
-.nx-btn:disabled{opacity:.55;cursor:default}
-.nx-foot{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
-@media (prefers-reduced-motion:reduce){.nx-title .cur,.nx-dot{animation:none}}
+.nx-field label{position:absolute;top:-7px;left:12px;background:hsl(var(--card));padding:0 6px;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:hsl(var(--muted-foreground))}
+.nx-field input{width:100%;background:hsl(var(--card));border:1px solid hsl(var(--input));border-radius:12px;padding:15px 14px;color:hsl(var(--foreground));font-family:inherit;font-size:14px;transition:border-color .15s ease,box-shadow .15s ease}
+.nx-field input:focus{outline:none;border-color:hsl(var(--brand-blue));box-shadow:0 0 0 3px hsl(var(--brand-blue) / .18)}
+.nx-field input::placeholder{color:hsl(var(--muted-foreground) / .6)}
+.nx-fielderr{color:hsl(var(--destructive));font-size:12px;margin-top:6px}
+.nx-btn{margin-top:6px;width:100%;background:hsl(var(--primary));color:hsl(var(--primary-foreground));border:0;border-radius:12px;padding:16px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 12px 28px rgba(19,34,56,.16);transition:transform .18s ease,background .15s ease,box-shadow .18s ease}
+.nx-btn:hover{background:hsl(var(--primary) / .9);transform:translateY(-2px)}
+.nx-btn:active{transform:translateY(0)}
+.nx-btn:disabled{opacity:.55;cursor:default;transform:none}
+.nx-foot{margin-top:24px;padding-top:16px;border-top:1px solid hsl(var(--border));display:flex;justify-content:space-between;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:hsl(var(--muted-foreground))}
+@media (prefers-reduced-motion:reduce){.nx-dot{animation:none}}
 `
 
 export function LoginPage() {
@@ -104,7 +98,7 @@ export function LoginPage() {
                     <img src={branding.has_logo ? getLogoUrl() : logo} alt={branding.login_title} />
                 </div>
 
-                <h1 className="nx-title">Sign in<span className="cur">_</span></h1>
+                <h1 className="nx-title">Sign in</h1>
                 <p className="nx-sub">Enter your credentials to access {branding.login_title}.</p>
 
                 {serverError && (

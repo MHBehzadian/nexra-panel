@@ -96,8 +96,8 @@ export function Sidebar({ onItemClick }: SidebarProps) {
                             key={item.href}
                             variant={isActive ? 'default' : 'ghost'}
                             className={cn(
-                                'w-full justify-start gap-3',
-                                isActive && 'bg-primary'
+                                'w-full justify-start gap-3 font-bold',
+                                isActive && 'bg-primary shadow-none hover:translate-y-0'
                             )}
                             onClick={() => {
                                 navigate(item.href)

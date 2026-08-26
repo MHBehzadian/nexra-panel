@@ -11,7 +11,7 @@ export function Header() {
 
     return (
         <>
-            <header className="border-b bg-background sticky top-0 z-40">
+            <header className="nx-header border-b sticky top-0 z-40">
                 <div className="flex items-center justify-between h-16 px-4 md:px-6">
                     <div className="flex items-center gap-4">
                         <Button
@@ -27,7 +27,7 @@ export function Header() {
                             )}
                         </Button>
 
-                        <Link to="/dashboard" className="flex items-center gap-2 font-bold text-lg">
+                        <Link to="/dashboard" className="flex items-center gap-2 font-black text-lg tracking-tight">
                             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white">
                                 W
                             </div>

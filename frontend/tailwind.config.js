@@ -41,11 +41,20 @@ export default {
                     DEFAULT: 'hsl(var(--card))',
                     foreground: 'hsl(var(--card-foreground))',
                 },
+                brand: {
+                    blue: 'hsl(var(--brand-blue) / <alpha-value>)',
+                    gold: 'hsl(var(--brand-gold) / <alpha-value>)',
+                    green: 'hsl(var(--brand-green) / <alpha-value>)',
+                },
+            },
+            fontFamily: {
+                sans: ['Yekan', 'Vazirmatn', 'Tahoma', 'ui-sans-serif', 'system-ui', 'sans-serif'],
             },
             borderRadius: {
                 lg: 'var(--radius)',
                 md: 'calc(var(--radius) - 2px)',
                 sm: 'calc(var(--radius) - 4px)',
+                card: '1.75rem',
             },
             keyframes: {
                 'accordion-down': {
