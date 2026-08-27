@@ -1,6 +1,7 @@
 import time
 import json
 import requests
+from datetime import datetime, timedelta, timezone
 
 from backend.schema._input import ClientInput, ClientUpdateInput
 
@@ -221,6 +222,53 @@ class APIService:
             json=payload,
         )
         return response.status_code
+
+    async def get_system_stats(self) -> dict:
+        """Marzban's own /api/system snapshot: user counts, lifetime bandwidth
+        and the CPU/RAM of the host Marzban itself runs on."""
+        await self._login()
+        response = self.session.get(f"{self.url}api/system", headers=self.headers)
+        if response.status_code != 200:
+            return {}
+        return response.json()
+
+    async def get_nodes_usage(self, start: str, end: str) -> list[dict]:
+        """Per-node traffic for a window. Marzban wants naive ISO timestamps."""
+        await self._login()
+        response = self.session.get(
+            f"{self.url}api/nodes/usage",
+            headers=self.headers,
+            params={"start": start, "end": end},
+        )
+        if response.status_code != 200:
+            return []
+        return response.json().get("usages", [])
+
+    async def count_online_users(self, window_seconds: int = 180) -> int:
+        """Marzban exposes no online counter, so the user list is scanned for
+        an online_at inside the window. Callers should cache this."""
+        await self._login()
+        response = self.session.get(f"{self.url}api/users", headers=self.headers)
+        if response.status_code != 200:
+            return 0
+
+        users = response.json().get("users", [])
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+        online = 0
+        for user in users:
+            seen = user.get("online_at")
+            if not seen:
+                continue
+            try:
+                stamp = datetime.fromisoformat(str(seen).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            # Marzban reports naive UTC; attach the timezone before comparing.
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            if stamp >= cutoff:
+                online += 1
+        return online
 
     async def get_admins(self) -> list[dict]:
         """List every admin as Marzban itself has them recorded (username,

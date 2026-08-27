@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import {
     Zap,
     Users,
-    HardDrive,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
@@ -26,7 +25,8 @@ import { dashboardAPI, userAPI } from '@/lib/api'
 import { bytesToGB, formatTraffic } from '@/lib/traffic-converter'
 import { formatDate, formatExpiryWithDays, cn } from '@/lib/utils'
 import { getUserRole } from '@/lib/auth'
-import { DashboardData, ClientsOutput } from '@/types'
+import { DashboardData, ClientsOutput, MarzbanOverview, MarzbanPeriod, MARZBAN_PERIODS } from '@/types'
+import { Donut, Gauge, SEGMENT_COLORS } from '@/components/charts/Donut'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -139,6 +139,8 @@ export function DashboardPage() {
     const [currentPage, setCurrentPage] = useState(1)
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'online'>('all')
+    const [marzban, setMarzban] = useState<MarzbanOverview | null>(null)
+    const [marzbanPeriod, setMarzbanPeriod] = useState<MarzbanPeriod>('1d')
     const [usersPerPage, setUsersPerPage] = useState(() => {
         const saved = localStorage.getItem('usersPerPage')
         return saved ? parseInt(saved, 10) : 5
@@ -154,6 +156,31 @@ export function DashboardPage() {
     useEffect(() => {
         fetchDashboardData()
     }, [])
+
+    // Marzban's own figures: refetched when the window changes, then kept warm
+    // on a slow timer. The backend caches the online scan, so this stays cheap.
+    useEffect(() => {
+        if (userRole !== 'superadmin') return
+
+        let cancelled = false
+
+        const load = async () => {
+            try {
+                const overview = await dashboardAPI.getMarzbanOverview(marzbanPeriod)
+                if (!cancelled) setMarzban(overview)
+            } catch (err) {
+                console.warn('Failed to fetch Marzban overview:', err)
+            }
+        }
+
+        load()
+        const interval = setInterval(load, 30000)
+
+        return () => {
+            cancelled = true
+            clearInterval(interval)
+        }
+    }, [userRole, marzbanPeriod])
 
     // Auto-refresh system info every 5 seconds for superadmin
     useEffect(() => {
@@ -268,6 +295,188 @@ export function DashboardPage() {
                 </div>
             )}
 
+            {/* Marzban Overview - superadmin only */}
+            {userRole === 'superadmin' && marzban && (
+                <div className="space-y-4">
+                    {/* Headline rings */}
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        <Card>
+                            <CardContent className="flex items-center gap-4 p-5">
+                                <Donut
+                                    size={104}
+                                    thickness={13}
+                                    segments={[
+                                        { label: 'Active', value: marzban.users.active },
+                                        {
+                                            label: 'Inactive',
+                                            value: Math.max(0, marzban.users.total - marzban.users.active),
+                                            color: 'hsl(var(--muted-foreground) / 0.25)',
+                                        },
+                                    ]}
+                                />
+                                <div className="min-w-0">
+                                    <p className="text-xs font-extrabold text-muted-foreground">Active Users</p>
+                                    <p className="text-2xl font-black tabular leading-tight">
+                                        {marzban.users.active.toLocaleString()}
+                                        <span className="text-base font-bold text-muted-foreground">
+                                            {' / '}{marzban.users.total.toLocaleString()}
+                                        </span>
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardContent className="flex items-center gap-4 p-5">
+                                <Donut
+                                    size={104}
+                                    thickness={13}
+                                    segments={[
+                                        { label: 'Online', value: marzban.users.online ?? 0, color: 'hsl(var(--brand-blue))' },
+                                        {
+                                            label: 'Offline',
+                                            value: Math.max(0, marzban.users.total - (marzban.users.online ?? 0)),
+                                            color: 'hsl(var(--muted-foreground) / 0.25)',
+                                        },
+                                    ]}
+                                />
+                                <div className="min-w-0">
+                                    <p className="text-xs font-extrabold text-muted-foreground">Online Users</p>
+                                    <p className="text-2xl font-black tabular leading-tight">
+                                        {marzban.users.online === null ? '-' : marzban.users.online.toLocaleString()}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">Across all nodes</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardContent className="flex items-center gap-4 p-5">
+                                <Donut
+                                    size={104}
+                                    thickness={13}
+                                    segments={[
+                                        { label: 'Download', value: marzban.traffic.outgoing, color: 'hsl(var(--brand-green))' },
+                                        { label: 'Upload', value: marzban.traffic.incoming, color: 'hsl(var(--brand-gold))' },
+                                    ]}
+                                />
+                                <div className="min-w-0">
+                                    <p className="text-xs font-extrabold text-muted-foreground">Data Usage</p>
+                                    <p className="text-2xl font-black tabular leading-tight">
+                                        {formatTraffic(marzban.traffic.total)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Down {formatTraffic(marzban.traffic.outgoing)} / Up {formatTraffic(marzban.traffic.incoming)}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardContent className="flex items-center gap-4 p-5">
+                                <Donut
+                                    size={104}
+                                    thickness={13}
+                                    segments={[
+                                        { label: 'Used', value: marzban.memory.used, color: 'hsl(var(--brand-blue))' },
+                                        {
+                                            label: 'Free',
+                                            value: Math.max(0, marzban.memory.total - marzban.memory.used),
+                                            color: 'hsl(var(--muted-foreground) / 0.25)',
+                                        },
+                                    ]}
+                                />
+                                <div className="min-w-0">
+                                    <p className="text-xs font-extrabold text-muted-foreground">Marzban Memory</p>
+                                    <p className="text-2xl font-black tabular leading-tight">
+                                        {bytesToGB(marzban.memory.used).toFixed(1)}
+                                        <span className="text-base font-bold text-muted-foreground">
+                                            {' / '}{bytesToGB(marzban.memory.total).toFixed(1)} GB
+                                        </span>
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        CPU {marzban.cpu.usage.toFixed(1)}% - {marzban.cpu.cores} cores
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Nodes usage */}
+                    <Card>
+                        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <CardTitle className="text-base">Nodes Usage</CardTitle>
+                            <div className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+                                {MARZBAN_PERIODS.map((period) => (
+                                    <button
+                                        key={period}
+                                        type="button"
+                                        onClick={() => setMarzbanPeriod(period)}
+                                        className={cn(
+                                            'min-w-11 rounded-lg px-3 py-1.5 text-xs font-extrabold transition-colors',
+                                            marzbanPeriod === period
+                                                ? 'bg-brand-blue text-white shadow-sm'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                        )}
+                                    >
+                                        {period}
+                                    </button>
+                                ))}
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {marzban.nodes.items.length === 0 ? (
+                                <p className="py-8 text-center text-sm text-muted-foreground">
+                                    No node traffic recorded in this window.
+                                </p>
+                            ) : (
+                                <div className="flex flex-col items-center gap-8 md:flex-row md:justify-center">
+                                    <Donut
+                                        segments={marzban.nodes.items.map((node) => ({
+                                            label: node.name,
+                                            value: node.usage,
+                                        }))}
+                                        centerLabel={formatTraffic(marzban.nodes.total)}
+                                        centerCaption="Total"
+                                    />
+
+                                    <div className="w-full max-w-sm space-y-2">
+                                        {marzban.nodes.items.map((node, index) => {
+                                            const share = marzban.nodes.total
+                                                ? (node.usage / marzban.nodes.total) * 100
+                                                : 0
+                                            return (
+                                                <div
+                                                    key={`${node.name}-${index}`}
+                                                    className="flex items-center gap-3 rounded-lg px-2 py-1.5"
+                                                >
+                                                    <span
+                                                        className="h-3 w-3 shrink-0 rounded-full"
+                                                        style={{
+                                                            backgroundColor:
+                                                                SEGMENT_COLORS[index % SEGMENT_COLORS.length],
+                                                        }}
+                                                    />
+                                                    <span className="min-w-0 flex-1 truncate text-sm font-bold">
+                                                        {node.name}
+                                                    </span>
+                                                    <span className="tabular text-sm font-extrabold">
+                                                        {formatTraffic(node.usage)}
+                                                    </span>
+                                                    <span className="tabular w-12 text-left text-xs text-muted-foreground">
+                                                        {share.toFixed(1)}%
+                                                    </span>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
             {/* SuperAdmin Stats Row */}
             {userRole === 'superadmin' && dashboardData && (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -319,50 +528,57 @@ export function DashboardPage() {
                 </div>
             )}
 
-            {/* System Stats Row */}
+            {/* System Stats Row - panel host resources */}
             {dashboardData?.system && (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
-                            <HardDrive className="h-4 w-4 text-primary" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">
-                                {(dashboardData.system.used_memory / 1024 / 1024 / 1024).toFixed(2)} GB
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Total: {(dashboardData.system.total_memory / 1024 / 1024 / 1024).toFixed(2)} GB
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Disk Usage</CardTitle>
-                            <HardDrive className="h-4 w-4 text-primary" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">
-                                {(dashboardData.system.disk_used / 1024 / 1024 / 1024).toFixed(2)} GB
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Total: {(dashboardData.system.disk_total / 1024 / 1024 / 1024).toFixed(2)} GB
-                            </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">CPU Usage</CardTitle>
-                            <Zap className="h-4 w-4 text-primary" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{dashboardData.system.cpu_percent.toFixed(1)}%</div>
-                            <p className="text-xs text-muted-foreground">Current usage</p>
-                        </CardContent>
-                    </Card>
-                </div>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Panel Server</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-2 gap-6 py-2 lg:grid-cols-4">
+                            <Gauge
+                                percent={dashboardData.system.cpu_percent}
+                                label="CPU"
+                                caption={
+                                    dashboardData.system.cpu_cores
+                                        ? `${dashboardData.system.cpu_cores} Cores`
+                                        : undefined
+                                }
+                            />
+                            <Gauge
+                                percent={
+                                    dashboardData.system.total_memory
+                                        ? (dashboardData.system.used_memory / dashboardData.system.total_memory) * 100
+                                        : 0
+                                }
+                                label="RAM"
+                                caption={`${bytesToGB(dashboardData.system.used_memory).toFixed(2)} GB / ${bytesToGB(dashboardData.system.total_memory).toFixed(2)} GB`}
+                            />
+                            <Gauge
+                                percent={
+                                    dashboardData.system.swap_total
+                                        ? ((dashboardData.system.swap_used || 0) / dashboardData.system.swap_total) * 100
+                                        : 0
+                                }
+                                label="Swap"
+                                caption={
+                                    dashboardData.system.swap_total
+                                        ? `${((dashboardData.system.swap_used || 0) / (1024 ** 2)).toFixed(2)} MB / ${(dashboardData.system.swap_total / (1024 ** 2)).toFixed(2)} MB`
+                                        : 'Not configured'
+                                }
+                            />
+                            <Gauge
+                                percent={
+                                    dashboardData.system.disk_total
+                                        ? (dashboardData.system.disk_used / dashboardData.system.disk_total) * 100
+                                        : 0
+                                }
+                                label="Storage"
+                                caption={`${bytesToGB(dashboardData.system.disk_used).toFixed(2)} GB / ${bytesToGB(dashboardData.system.disk_total).toFixed(2)} GB`}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
             )}
 
             {/* Admin News - Only for admin role */}

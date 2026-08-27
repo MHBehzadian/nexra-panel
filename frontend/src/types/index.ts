@@ -249,6 +249,55 @@ export interface LoginResponse {
     token_type: string
 }
 
+export interface SystemInfo {
+    total_memory: number
+    used_memory: number
+    cpu_percent: number
+    cpu_cores?: number
+    disk_total: number
+    disk_used: number
+    swap_total?: number
+    swap_used?: number
+}
+
+export interface MarzbanNodeUsage {
+    id: number | null
+    name: string
+    usage: number
+}
+
+export interface MarzbanOverview {
+    panel: string
+    period: string
+    version?: string | null
+    users: {
+        active: number
+        total: number
+        /** null when the online scan failed; the rest of the payload is still valid. */
+        online: number | null
+    }
+    traffic: {
+        incoming: number
+        outgoing: number
+        total: number
+    }
+    memory: {
+        used: number
+        total: number
+    }
+    cpu: {
+        usage: number
+        cores: number
+    }
+    nodes: {
+        total: number
+        items: MarzbanNodeUsage[]
+    }
+}
+
+export const MARZBAN_PERIODS = ['7h', '1d', '3d', '1w', '1m', '3m'] as const
+export type MarzbanPeriod = typeof MARZBAN_PERIODS[number]
+
 export interface DashboardData {
     remaining_traffic?: number
     initial_traffic?: number
@@ -258,13 +307,7 @@ export interface DashboardData {
     users?: ClientsOutput[]
     admins?: AdminOutput[]
     panels?: PanelOutput[]
-    system?: {
-        total_memory: number
-        used_memory: number
-        cpu_percent: number
-        disk_total: number
-        disk_used: number
-    }
+    system?: SystemInfo
     ads?: {
         title?: string
         text?: string

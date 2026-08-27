@@ -9,6 +9,7 @@ import {
     ResponseModel,
     AdminFormData,
     PanelFormData,
+    MarzbanOverview,
 } from '@/types'
 import { gbToBytes } from './traffic-converter'
 
@@ -75,6 +76,17 @@ export const dashboardAPI = {
         }
 
         return response.data.data || {}
+    },
+
+    // Returns null rather than throwing when no Marzban panel is configured or
+    // the panel is unreachable, so the dashboard just hides the section.
+    getMarzbanOverview: async (period: string = '1d'): Promise<MarzbanOverview | null> => {
+        const response = await api.get<ResponseModel<MarzbanOverview | null>>(
+            `/superadmin/marzban/overview`,
+            { params: { period } }
+        )
+
+        return response.data.data ?? null
     },
 }
 
