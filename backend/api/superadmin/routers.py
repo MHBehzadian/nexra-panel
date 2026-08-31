@@ -495,6 +495,7 @@ async def get_system_info_endpoint(
 @router.get("/marzban/overview", description="Aggregated Marzban stats for the dashboard")
 async def get_marzban_overview(
     period: str = "1d",
+    refresh: bool = False,
     db: Session = Depends(get_db),
     current_admin: dict = Depends(get_current_superadmin),
 ):
@@ -526,7 +527,9 @@ async def get_marzban_overview(
             username=panel.username,
             password=panel.password,
         )
-        data = await build_marzban_overview(api_service, panel.name, period)
+        data = await build_marzban_overview(
+            api_service, panel.name, period, force=refresh
+        )
         return ResponseModel(
             success=True,
             message="Marzban overview retrieved successfully",

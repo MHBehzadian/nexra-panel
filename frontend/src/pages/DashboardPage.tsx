@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
     Zap,
     Users,
+    RefreshCw,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
@@ -141,6 +142,7 @@ export function DashboardPage() {
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'online'>('all')
     const [marzban, setMarzban] = useState<MarzbanOverview | null>(null)
     const [marzbanPeriod, setMarzbanPeriod] = useState<MarzbanPeriod>('1d')
+    const [statsRefreshing, setStatsRefreshing] = useState(false)
     const [usersPerPage, setUsersPerPage] = useState(() => {
         const saved = localStorage.getItem('usersPerPage')
         return saved ? parseInt(saved, 10) : 5
@@ -250,6 +252,27 @@ export function DashboardPage() {
         }
     }
 
+    // Manual refresh: pulls the Marzban figures past their cache and the panel's
+    // own system snapshot, so the numbers on screen are genuinely current.
+    const handleRefreshStats = async () => {
+        setStatsRefreshing(true)
+        try {
+            const [overview, systemInfo] = await Promise.all([
+                dashboardAPI.getMarzbanOverview(marzbanPeriod, true),
+                dashboardAPI.getSystemInfo().catch(() => null),
+            ])
+            setMarzban(overview)
+            if (systemInfo) {
+                setDashboardData((prev) => (prev ? { ...prev, system: systemInfo } : prev))
+            }
+        } catch (err: any) {
+            console.error('Failed to refresh stats:', err)
+            alert(err?.message || 'Failed to refresh stats')
+        } finally {
+            setStatsRefreshing(false)
+        }
+    }
+
     const handleToggleStatus = async (user: ClientsOutput) => {
         try {
             // Toggle status only: the expiry timestamp is forwarded untouched
@@ -298,6 +321,26 @@ export function DashboardPage() {
             {/* Marzban Overview - superadmin only */}
             {userRole === 'superadmin' && marzban && (
                 <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-black tracking-tight">Marzban</h2>
+                            <p className="truncate text-xs text-muted-foreground">
+                                {marzban.panel}{marzban.version ? ` - v${marzban.version}` : ''}
+                            </p>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleRefreshStats}
+                            disabled={statsRefreshing}
+                        >
+                            <RefreshCw
+                                className={cn('h-4 w-4 mr-2', statsRefreshing && 'animate-spin')}
+                            />
+                            {statsRefreshing ? 'Refreshing...' : 'Refresh'}
+                        </Button>
+                    </div>
+
                     {/* Headline rings */}
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                         <Card>
@@ -585,8 +628,8 @@ export function DashboardPage() {
             {userRole === 'admin' && dashboardData?.news && dashboardData.news.length > 0 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-sm font-medium flex items-center gap-2">
-                            <Zap className="h-4 w-4 text-primary" />
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <Zap className="h-5 w-5 text-primary" />
                             News & Updates
                         </CardTitle>
                     </CardHeader>
@@ -597,8 +640,10 @@ export function DashboardPage() {
                                 className="flex items-start gap-2 p-2 rounded-md hover:bg-muted/20 transition-colors duration-150"
                                 style={{ direction: /[\u0600-\u06FF]/.test(newsItem) ? 'rtl' : 'ltr' }}
                             >
-                                <Zap className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
-                                <div className="text-sm text-muted-foreground break-words">{newsItem}</div>
+                                <Zap className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                                <div className="text-base font-medium leading-relaxed text-foreground break-words">
+                                    {newsItem}
+                                </div>
                             </div>
                         ))}
                     </CardContent>

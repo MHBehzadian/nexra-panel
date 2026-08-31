@@ -31,10 +31,10 @@ def period_bounds(period: str) -> tuple[str, str]:
     return start.strftime("%Y-%m-%dT%H:%M:%S"), end.strftime("%Y-%m-%dT%H:%M:%S")
 
 
-async def _online_count(api_service, panel_name: str) -> int:
+async def _online_count(api_service, panel_name: str, force: bool = False) -> int:
     cached = _online_cache.get(panel_name)
     now = time.time()
-    if cached and now - cached[0] < _ONLINE_CACHE_TTL:
+    if not force and cached and now - cached[0] < _ONLINE_CACHE_TTL:
         return cached[1]
 
     count = await api_service.count_online_users()
@@ -42,7 +42,9 @@ async def _online_count(api_service, panel_name: str) -> int:
     return count
 
 
-async def build_marzban_overview(api_service, panel_name: str, period: str) -> dict:
+async def build_marzban_overview(
+    api_service, panel_name: str, period: str, force: bool = False
+) -> dict:
     stats = await api_service.get_system_stats()
 
     start, end = period_bounds(period)
@@ -67,7 +69,7 @@ async def build_marzban_overview(api_service, panel_name: str, period: str) -> d
     outgoing = int(stats.get("outgoing_bandwidth") or 0)
 
     try:
-        online = await _online_count(api_service, panel_name)
+        online = await _online_count(api_service, panel_name, force=force)
     except Exception:
         # The headline figures are worth showing even if the user scan fails.
         online = None

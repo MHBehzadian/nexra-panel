@@ -80,10 +80,15 @@ export const dashboardAPI = {
 
     // Returns null rather than throwing when no Marzban panel is configured or
     // the panel is unreachable, so the dashboard just hides the section.
-    getMarzbanOverview: async (period: string = '1d'): Promise<MarzbanOverview | null> => {
+    // `force` skips the backend's online-user cache, so a manual refresh
+    // really does refetch rather than replaying a cached count.
+    getMarzbanOverview: async (
+        period: string = '1d',
+        force: boolean = false
+    ): Promise<MarzbanOverview | null> => {
         const response = await api.get<ResponseModel<MarzbanOverview | null>>(
             `/superadmin/marzban/overview`,
-            { params: { period } }
+            { params: force ? { period, refresh: true } : { period } }
         )
 
         return response.data.data ?? null
