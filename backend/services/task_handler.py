@@ -781,6 +781,18 @@ async def update_a_user(
                 },
             )
 
+        # Marzban derives "limited" and "expired" itself; "disabled" is the only
+        # state an admin sets deliberately. The edit form sends back whatever
+        # status it was showing, so topping up a user who had run out of data or
+        # time would write that derived state back as a real disable. Revive
+        # those instead, and leave a deliberate disable alone.
+        previous_status = str(user_info.get("status") or "").lower()
+        if not user_input.enable and previous_status in ("limited", "expired"):
+            user_input = user_input.model_copy(update={"enable": True})
+            logger.info(
+                f"Reactivating {user_input.email} on update: was {previous_status}"
+            )
+
         update_user = await admin_task.update_user_in_panel(
             user_input.email, user_input
         )

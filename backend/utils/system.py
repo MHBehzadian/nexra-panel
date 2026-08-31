@@ -1,9 +1,14 @@
 import psutil
 
+# Sampling CPU with an interval blocks for that long, and the dashboard polls
+# this every few seconds. Priming it once here lets later calls measure against
+# the previous reading instead, so the endpoint returns immediately.
+psutil.cpu_percent(interval=None)
+
 
 def get_system_info() -> dict:
     memory = psutil.virtual_memory()
-    cpu_percent = psutil.cpu_percent(interval=1)
+    cpu_percent = psutil.cpu_percent(interval=None)
     disk_usage = psutil.disk_usage("/")
     swap = psutil.swap_memory()
     return {

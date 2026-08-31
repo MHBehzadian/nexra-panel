@@ -7,10 +7,11 @@ from backend.schema._input import ClientInput, ClientUpdateInput
 
 
 class APIService:
-    _username: str | None = None
-    _cached_token: str | None = None
-    _cached_url: str | None = None
-    _token_time: float | None = None
+    # Marzban fires a Telegram alert on every admin login, so tokens are reused
+    # until they age out. Keyed per (url, username): the previous single-slot
+    # cache never recorded the username it belonged to, so its guard could never
+    # match and every single API call logged in again.
+    _token_cache: dict[tuple[str, str], tuple[str, float]] = {}
     _token_ttl = 300
 
     def __init__(
@@ -33,16 +34,11 @@ class APIService:
 
     async def _login(self):
         now = time.time()
+        key = (self.url, self.username)
 
-        if (
-            APIService._username == self.username
-            and
-            APIService._cached_token
-            and APIService._cached_url == self.url
-            and APIService._token_time
-            and now - APIService._token_time < APIService._token_ttl
-        ):
-            self.token = APIService._cached_token
+        cached = APIService._token_cache.get(key)
+        if cached and now - cached[1] < APIService._token_ttl:
+            self.token = cached[0]
             self.headers = {"Authorization": f"Bearer {self.token}"}
             return
 
@@ -58,9 +54,11 @@ class APIService:
             .get("access_token")
         )
 
-        APIService._cached_token = token
-        APIService._cached_url = self.url
-        APIService._token_time = now
+        # A failed login must not be cached, or the panel would keep replaying
+        # the failure for the whole TTL.
+        if token:
+            APIService._token_cache[key] = (token, now)
+
         self.token = token
         self.headers = {"Authorization": f"Bearer {self.token}"}
 
@@ -88,39 +86,18 @@ class APIService:
         return response
 
     async def get_user(self, username: str) -> dict | bool:
-        token = (
-            requests.post(
-                f"{self.url}api/admin/token",
-                data={
-                    "username": self.username,
-                    "password": self.password,
-                },
-            )
-            .json()
-            .get("access_token")
-        )
-
-        user = requests.get(
+        await self._login()
+        user = self.session.get(
             f"{self.url}api/user/{username}",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=self.headers,
         ).json()
         return user
 
     async def get_inbounds(self) -> dict:
-        token = (
-            requests.post(
-                f"{self.url}api/admin/token",
-                data={
-                    "username": self.username,
-                    "password": self.password,
-                },
-            )
-            .json()
-            .get("access_token")
-        )
+        await self._login()
         url = f"{self.url}api/inbounds"
 
-        response = self.session.get(url, headers={"Authorization": f"Bearer {token}"})
+        response = self.session.get(url, headers=self.headers)
 
         # Transform to list of tags for each protocol
         inbounds = response.json()
