@@ -88,6 +88,17 @@ class BotChangePasswordInput(BaseModel):
     username: Optional[str] = None
 
 
+class BotCreateAdminInput(BaseModel):
+    """Superadmin provisioning a new reseller panel from the bot."""
+
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    panel: str
+    traffic_gb: float = Field(ge=0)
+    expiry_days: Optional[int] = None
+    telegram_id: Optional[int] = None
+
+
 class BotGrantInput(BaseModel):
     """Superadmin granting traffic straight to a panel, by username — no
     Telegram link required, so panels nobody has linked yet can still be topped up."""

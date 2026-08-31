@@ -134,10 +134,16 @@ def grant_admin_traffic(db: Session, admin: Admins, added_traffic) -> None:
 
 
 def update_marzban_password(db: Session, admin: Admins, new_password: str) -> None:
-    """Update the Nexra-side copy of the admin's Marzban password (plaintext, matching
-    how add_admin/update_admin_values already store it — Marzban's own admin account
-    is NOT updated by this call; the superadmin must mirror it there manually."""
+    """Set both passwords an admin has, keeping them in step.
+
+    An admin has two: `hashed_password` logs them into Nexra itself, and
+    `marzban_password` is the credential Nexra presents to Marzban on their
+    behalf. The panel's own edit form always sets both together, so changing
+    only one here left the admin unable to log into Nexra with their new
+    password even though Marzban had accepted it.
+    """
     admin.marzban_password = new_password
+    admin.hashed_password = hash_password(new_password)
     db.commit()
 
 
