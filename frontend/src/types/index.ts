@@ -260,10 +260,14 @@ export interface SystemInfo {
     swap_used?: number
 }
 
+export type MarzbanNodeStatus = 'connected' | 'connecting' | 'error' | 'disabled' | 'unknown'
+
 export interface MarzbanNodeUsage {
     id: number | null
     name: string
     usage: number
+    /** 'connected' for the master itself (no separate connection to report). */
+    status: MarzbanNodeStatus
 }
 
 export interface MarzbanOverview {

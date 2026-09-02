@@ -127,6 +127,14 @@ interface ExpandedRow {
     [key: string]: boolean
 }
 
+const NODE_STATUS_META: Record<string, { dotClass: string; label: string }> = {
+    connected: { dotClass: 'bg-brand-green', label: 'Connected' },
+    connecting: { dotClass: 'bg-brand-gold animate-pulse', label: 'Connecting' },
+    error: { dotClass: 'bg-destructive', label: 'Error' },
+    disabled: { dotClass: 'bg-muted-foreground/40', label: 'Disabled' },
+    unknown: { dotClass: 'bg-muted-foreground/40', label: 'Unknown' },
+}
+
 export function DashboardPage() {
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
     const [loading, setLoading] = useState(true)
@@ -502,6 +510,7 @@ export function DashboardPage() {
                                             const share = marzban.nodes.total
                                                 ? (node.usage / marzban.nodes.total) * 100
                                                 : 0
+                                            const status = NODE_STATUS_META[node.status] || NODE_STATUS_META.unknown
                                             return (
                                                 <div
                                                     key={`${node.name}-${index}`}
@@ -513,6 +522,10 @@ export function DashboardPage() {
                                                             backgroundColor:
                                                                 SEGMENT_COLORS[index % SEGMENT_COLORS.length],
                                                         }}
+                                                    />
+                                                    <span
+                                                        className={cn('h-2 w-2 shrink-0 rounded-full', status.dotClass)}
+                                                        title={status.label}
                                                     />
                                                     <span className="min-w-0 flex-1 truncate text-sm font-bold">
                                                         {node.name}

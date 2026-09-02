@@ -10,6 +10,17 @@ from datetime import datetime, timedelta
 
 from backend.utils.logger import logger
 
+
+async def _node_statuses(api_service) -> dict:
+    """id -> Marzban's status string. Failures degrade to an empty map so a
+    status hiccup never blanks the traffic chart that already works."""
+    try:
+        statuses = await api_service.get_nodes_status()
+    except Exception as exc:
+        logger.warning(f"Failed to fetch node statuses: {exc}")
+        return {}
+    return {n["id"]: (n.get("status") or "unknown") for n in statuses if n.get("id") is not None}
+
 # Window presets offered by the dashboard's period switch.
 PERIODS: dict[str, timedelta] = {
     "7h": timedelta(hours=7),
@@ -85,7 +96,12 @@ async def build_marzban_overview(
     stats = await api_service.get_system_stats()
 
     start, end = period_bounds(period)
-    usages = await api_service.get_nodes_usage(start, end)
+    # Run together: neither depends on the other, and status is a second full
+    # request against Marzban that would otherwise add to the wait serially.
+    usages, statuses = await asyncio.gather(
+        api_service.get_nodes_usage(start, end),
+        _node_statuses(api_service),
+    )
 
     nodes = []
     for entry in usages:
@@ -93,11 +109,17 @@ async def build_marzban_overview(
         if used <= 0:
             # Nodes idle for the whole window would only clutter the chart.
             continue
+        node_id = entry.get("node_id")
+        # A null node_id is the master itself, which never appears in
+        # api/nodes and has no connection state to report - it's simply up if
+        # this request is answering at all.
+        status = "connected" if node_id is None else statuses.get(node_id, "unknown")
         nodes.append(
             {
-                "id": entry.get("node_id"),
+                "id": node_id,
                 "name": entry.get("node_name") or "Master",
                 "usage": used,
+                "status": status,
             }
         )
     nodes.sort(key=lambda n: n["usage"], reverse=True)

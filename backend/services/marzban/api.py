@@ -230,6 +230,35 @@ class APIService:
             return []
         return response.json().get("usages", [])
 
+    async def get_nodes_status(self) -> list[dict]:
+        """Connection status for every configured remote node - does not
+        include the master itself, which api/nodes/usage reports separately
+        with a null node_id. Read-only, GET /api/nodes."""
+        await self._login()
+        response = self.session.get(
+            f"{self.url}api/nodes",
+            headers=self.headers,
+            timeout=self._request_timeout,
+        )
+        if response.status_code != 200:
+            return []
+
+        nodes = response.json()
+        if not isinstance(nodes, list):
+            return []
+
+        return [
+            {
+                "id": node.get("id"),
+                "name": node.get("name"),
+                # connected / connecting / error / disabled, per Marzban's enum.
+                "status": node.get("status"),
+                "message": node.get("message"),
+            }
+            for node in nodes
+            if isinstance(node, dict)
+        ]
+
     async def count_online_users(self, window_seconds: int = 180) -> int:
         """Count users seen within the window.
 
