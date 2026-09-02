@@ -149,7 +149,7 @@ export function Sidebar({ onItemClick }: SidebarProps) {
                             <Zap className="h-5 w-5 text-brand-gold" />
                             Finance
                         </DialogTitle>
-                        <DialogDescription className="pt-2 text-base leading-8 text-foreground" dir="rtl">
+                        <DialogDescription className="pt-2 text-sm sm:text-base leading-7 sm:leading-8 text-foreground" dir="rtl">
                             برای شارژ پنل از ربات اختصاصی استفاده کنید.
                         </DialogDescription>
                     </DialogHeader>

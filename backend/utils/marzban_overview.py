@@ -23,6 +23,7 @@ async def _node_statuses(api_service) -> dict:
 
 # Window presets offered by the dashboard's period switch.
 PERIODS: dict[str, timedelta] = {
+    "1h": timedelta(hours=1),
     "7h": timedelta(hours=7),
     "1d": timedelta(days=1),
     "3d": timedelta(days=3),

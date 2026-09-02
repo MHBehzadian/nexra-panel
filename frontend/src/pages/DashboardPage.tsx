@@ -127,12 +127,14 @@ interface ExpandedRow {
     [key: string]: boolean
 }
 
-const NODE_STATUS_META: Record<string, { dotClass: string; label: string }> = {
-    connected: { dotClass: 'bg-brand-green', label: 'Connected' },
-    connecting: { dotClass: 'bg-brand-gold animate-pulse', label: 'Connecting' },
-    error: { dotClass: 'bg-destructive', label: 'Error' },
-    disabled: { dotClass: 'bg-muted-foreground/40', label: 'Disabled' },
-    unknown: { dotClass: 'bg-muted-foreground/40', label: 'Unknown' },
+// Mirrors the Active/Inactive badge convention used for admins and users
+// elsewhere on this page, so node connectivity reads the same way.
+const NODE_STATUS_META: Record<string, { variant: 'default' | 'destructive' | 'secondary' | 'outline'; label: string }> = {
+    connected: { variant: 'default', label: 'Connected' },
+    connecting: { variant: 'secondary', label: 'Connecting' },
+    error: { variant: 'destructive', label: 'Error' },
+    disabled: { variant: 'outline', label: 'Disabled' },
+    unknown: { variant: 'outline', label: 'Unknown' },
 }
 
 export function DashboardPage() {
@@ -514,7 +516,7 @@ export function DashboardPage() {
                                             return (
                                                 <div
                                                     key={`${node.name}-${index}`}
-                                                    className="flex items-center gap-3 rounded-lg px-2 py-1.5"
+                                                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5"
                                                 >
                                                     <span
                                                         className="h-3 w-3 shrink-0 rounded-full"
@@ -523,13 +525,12 @@ export function DashboardPage() {
                                                                 SEGMENT_COLORS[index % SEGMENT_COLORS.length],
                                                         }}
                                                     />
-                                                    <span
-                                                        className={cn('h-2 w-2 shrink-0 rounded-full', status.dotClass)}
-                                                        title={status.label}
-                                                    />
                                                     <span className="min-w-0 flex-1 truncate text-sm font-bold">
                                                         {node.name}
                                                     </span>
+                                                    <Badge variant={status.variant} className="text-[10px]">
+                                                        {status.label}
+                                                    </Badge>
                                                     <span className="tabular text-sm font-extrabold">
                                                         {formatTraffic(node.usage)}
                                                     </span>
