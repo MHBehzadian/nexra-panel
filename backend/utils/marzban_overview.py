@@ -4,8 +4,11 @@ Kept out of the router so the caching and the window arithmetic stay testable
 and the endpoint itself is only wiring.
 """
 
+import asyncio
 import time
 from datetime import datetime, timedelta
+
+from backend.utils.logger import logger
 
 # Window presets offered by the dashboard's period switch.
 PERIODS: dict[str, timedelta] = {
@@ -17,10 +20,14 @@ PERIODS: dict[str, timedelta] = {
     "3m": timedelta(days=90),
 }
 
-# Counting online users means pulling the whole user list, which is far too
-# heavy to repeat on every dashboard poll, so it is cached briefly.
+# Counting online users is the one expensive call here, so the request path
+# never waits on it: a stale value is served straight away and a refresh runs
+# in the background. That keeps the endpoint fast enough that nginx never times
+# the panel out, at the cost of the figure lagging by up to one refresh.
 _ONLINE_CACHE_TTL = 45
 _online_cache: dict[str, tuple[float, int]] = {}
+_online_refreshing: set[str] = set()
+_background_tasks: set = set()
 
 
 def period_bounds(period: str) -> tuple[str, str]:
@@ -31,15 +38,45 @@ def period_bounds(period: str) -> tuple[str, str]:
     return start.strftime("%Y-%m-%dT%H:%M:%S"), end.strftime("%Y-%m-%dT%H:%M:%S")
 
 
-async def _online_count(api_service, panel_name: str, force: bool = False) -> int:
+async def _refresh_online(api_service, panel_name: str) -> None:
+    """Runs detached. The scan uses blocking requests, so it goes to a worker
+    thread to keep the event loop free on a single-core box."""
+
+    def scan() -> int:
+        # Built and run inside the worker thread so the coroutine never
+        # straddles two event loops.
+        return asyncio.run(api_service.count_online_users())
+
+    try:
+        count = await asyncio.to_thread(scan)
+        _online_cache[panel_name] = (time.time(), count)
+    except Exception as exc:
+        logger.warning(f"Online-user scan failed for {panel_name}: {exc}")
+    finally:
+        _online_refreshing.discard(panel_name)
+
+
+async def _online_count(api_service, panel_name: str, force: bool = False):
+    """Returns the cached count, kicking off a refresh when it is stale.
+
+    None only on the very first call for a panel, before any scan has finished;
+    after that a previous value is always served rather than blocking.
+    """
     cached = _online_cache.get(panel_name)
     now = time.time()
-    if not force and cached and now - cached[0] < _ONLINE_CACHE_TTL:
+    fresh = cached and now - cached[0] < _ONLINE_CACHE_TTL
+
+    if fresh and not force:
         return cached[1]
 
-    count = await api_service.count_online_users()
-    _online_cache[panel_name] = (now, count)
-    return count
+    if panel_name not in _online_refreshing:
+        _online_refreshing.add(panel_name)
+        task = asyncio.create_task(_refresh_online(api_service, panel_name))
+        # Without a strong reference the loop may collect the task mid-flight.
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+
+    return cached[1] if cached else None
 
 
 async def build_marzban_overview(

@@ -13,6 +13,9 @@ class APIService:
     # match and every single API call logged in again.
     _token_cache: dict[tuple[str, str], tuple[str, float]] = {}
     _token_ttl = 300
+    # Without this a stalled Marzban holds the panel's request open until nginx
+    # gives up and serves a 504.
+    _request_timeout = 15
 
     def __init__(
         self, url: str, username: str, password: str, inbounds: dict | str | None = None
@@ -49,6 +52,7 @@ class APIService:
                     "username": self.username,
                     "password": self.password,
                 },
+                timeout=self._request_timeout,
             )
             .json()
             .get("access_token")
@@ -204,7 +208,11 @@ class APIService:
         """Marzban's own /api/system snapshot: user counts, lifetime bandwidth
         and the CPU/RAM of the host Marzban itself runs on."""
         await self._login()
-        response = self.session.get(f"{self.url}api/system", headers=self.headers)
+        response = self.session.get(
+            f"{self.url}api/system",
+            headers=self.headers,
+            timeout=self._request_timeout,
+        )
         if response.status_code != 200:
             return {}
         return response.json()
@@ -216,42 +224,103 @@ class APIService:
             f"{self.url}api/nodes/usage",
             headers=self.headers,
             params={"start": start, "end": end},
+            timeout=self._request_timeout,
         )
         if response.status_code != 200:
             return []
         return response.json().get("usages", [])
 
     async def count_online_users(self, window_seconds: int = 180) -> int:
-        """Marzban exposes no online counter, so the user list is scanned for
-        an online_at inside the window. Callers should cache this."""
-        await self._login()
-        response = self.session.get(f"{self.url}api/users", headers=self.headers)
-        if response.status_code != 200:
-            return 0
+        """Count users seen within the window.
 
-        users = response.json().get("users", [])
+        Marzban has no online counter, and pulling every user is expensive: the
+        response carries each user's proxies, inbounds and subscription links,
+        which on a large panel is many megabytes. So this asks for the most
+        recently seen users first and stops at the first one outside the
+        window, which normally reads a page or two instead of the whole list.
+
+        Marzban rejects the sort field on some builds; that falls back to
+        paging in natural order and scanning everything, still bounded by
+        max_pages so a huge panel cannot stall the request forever.
+        """
+        await self._login()
+
         cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+        page_size = 200
+        max_pages = 40
         online = 0
-        for user in users:
-            seen = user.get("online_at")
-            if not seen:
-                continue
-            try:
-                stamp = datetime.fromisoformat(str(seen).replace("Z", "+00:00"))
-            except ValueError:
-                continue
-            # Marzban reports naive UTC; attach the timezone before comparing.
-            if stamp.tzinfo is None:
-                stamp = stamp.replace(tzinfo=timezone.utc)
-            if stamp >= cutoff:
-                online += 1
+        sorted_by_seen = True
+
+        page = 0
+        pages_read = 0
+
+        while pages_read < max_pages:
+            params = {"offset": page * page_size, "limit": page_size}
+            if sorted_by_seen:
+                params["sort"] = "-online_at"
+
+            response = self.session.get(
+                f"{self.url}api/users",
+                headers=self.headers,
+                params=params,
+                timeout=self._request_timeout,
+            )
+
+            if response.status_code != 200:
+                if sorted_by_seen and page == 0:
+                    # Most likely the sort field is unsupported here. Retry the
+                    # very same page unsorted; nothing is counted yet, so the
+                    # fallback cannot double count. A later failure just
+                    # returns what has been counted so far.
+                    sorted_by_seen = False
+                    continue
+                return online
+
+            pages_read += 1
+
+            users = response.json().get("users", [])
+            if not users:
+                break
+
+            for user in users:
+                stamp = self._parse_online_at(user.get("online_at"))
+                if stamp is None:
+                    continue
+                if stamp >= cutoff:
+                    online += 1
+                elif sorted_by_seen:
+                    # Newest first, so everything after this is older too.
+                    return online
+
+            if len(users) < page_size:
+                break
+
+            page += 1
+
         return online
+
+    @staticmethod
+    def _parse_online_at(seen) -> datetime | None:
+        if not seen:
+            return None
+        try:
+            stamp = datetime.fromisoformat(str(seen).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        # Marzban reports naive UTC; attach the timezone before comparing.
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        return stamp
 
     async def get_admins(self) -> list[dict]:
         """List every admin as Marzban itself has them recorded (username,
         telegram_id, is_sudo, ...). Requires sudo credentials."""
         await self._login()
-        response = self.session.get(f"{self.url}api/admins", headers=self.headers)
+        response = self.session.get(
+            f"{self.url}api/admins",
+            headers=self.headers,
+            timeout=self._request_timeout,
+        )
         if response.status_code != 200:
             return []
         return response.json()

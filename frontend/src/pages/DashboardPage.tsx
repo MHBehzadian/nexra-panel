@@ -178,9 +178,19 @@ export function DashboardPage() {
         load()
         const interval = setInterval(load, 30000)
 
+        // The very first request only kicks the online scan off; poll briefly
+        // until it lands instead of showing a blank tile for half a minute.
+        const settle = setInterval(() => {
+            setMarzban((current) => {
+                if (current && current.users.online === null) load()
+                return current
+            })
+        }, 5000)
+
         return () => {
             cancelled = true
             clearInterval(interval)
+            clearInterval(settle)
         }
     }, [userRole, marzbanPeriod])
 
@@ -386,9 +396,13 @@ export function DashboardPage() {
                                 <div className="min-w-0">
                                     <p className="text-xs font-extrabold text-muted-foreground">Online Users</p>
                                     <p className="text-2xl font-black tabular leading-tight">
-                                        {marzban.users.online === null ? '-' : marzban.users.online.toLocaleString()}
+                                        {marzban.users.online === null
+                                            ? <span className="text-muted-foreground">...</span>
+                                            : marzban.users.online.toLocaleString()}
                                     </p>
-                                    <p className="text-xs text-muted-foreground">Across all nodes</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {marzban.users.online === null ? 'Counting...' : 'Across all nodes'}
+                                    </p>
                                 </div>
                             </CardContent>
                         </Card>
