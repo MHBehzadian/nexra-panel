@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, UploadFile, File
+from fastapi import APIRouter, Depends, status, UploadFile, File, Form
 from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session
 import os
@@ -8,7 +8,6 @@ from backend.schema._input import (
     AdminInput,
     AdminUpdateInput,
     PanelInput,
-    NewsInput,
     SettingsInput,
 )
 from backend.db import crud
@@ -24,6 +23,7 @@ from backend.utils.marzban_overview import (
     build_marzban_overview,
 )
 from backend.utils.settings_store import get_settings, update_settings, save_logo
+from backend.utils.banners import save_banner, delete_banner, get_banner_path
 from backend.utils.telegram import send_backup_to_telegram
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
@@ -407,6 +407,7 @@ async def get_news(
                         "id": x.id,
                         "message": x.message,
                         "created_at": x.created_at,
+                        "has_banner": get_banner_path(x.id) is not None,
                     },
                     news,
                 )
@@ -425,13 +426,36 @@ async def get_news(
 
 @router.post("/news", description="Add news", response_model=ResponseModel)
 async def add_news(
-    news: NewsInput,
+    message: str | None = Form(None, max_length=250),
+    image: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     admin: dict = Depends(get_current_superadmin),
 ):
-    """Add news"""
+    """Add news: a message, a banner image, or both - at least one is required."""
+    text = (message or "").strip() or None
+
+    image_bytes: bytes | None = None
+    if image is not None and image.filename:
+        image_bytes = await image.read()
+        if image_bytes and not (image.content_type or "").startswith("image/"):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"success": False, "message": "Only image files are allowed"},
+            )
+
+    if not text and not image_bytes:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "success": False,
+                "message": "Add a message, a banner image, or both",
+            },
+        )
+
     try:
-        crud.add_news(db, news.news)
+        news = crud.add_news(db, text)
+        if image_bytes:
+            save_banner(news.id, image_bytes)
         return ResponseModel(
             success=True,
             message="News added successfully",
@@ -468,6 +492,7 @@ async def delete_news(
             )
         db.delete(news)
         db.commit()
+        delete_banner(news_id)
         return ResponseModel(
             success=True,
             message="News deleted successfully",

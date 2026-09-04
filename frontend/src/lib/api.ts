@@ -269,8 +269,8 @@ export const superadminAPI = {
         return response.data.data || []
     },
 
-    getNews: async (): Promise<Array<{ id: number; message: string; created_at: string }>> => {
-        const response = await api.get<ResponseModel<Array<{ id: number; message: string; created_at: string }>>>(`/superadmin/news`)
+    getNews: async (): Promise<Array<{ id: number; message: string | null; created_at: string; has_banner: boolean }>> => {
+        const response = await api.get<ResponseModel<Array<{ id: number; message: string | null; created_at: string; has_banner: boolean }>>>(`/superadmin/news`)
 
         if (!response.data.success) {
             throw new Error(response.data.message || 'Failed to fetch news')
@@ -279,8 +279,15 @@ export const superadminAPI = {
         return response.data.data || []
     },
 
-    addNews: async (message: string): Promise<void> => {
-        const response = await api.post<ResponseModel<void>>(`/superadmin/news`, { news: message })
+    // A message, a banner image, or both - the backend rejects an entry with neither.
+    addNews: async (message: string, image?: File | null): Promise<void> => {
+        const formData = new FormData()
+        if (message.trim()) formData.append('message', message.trim())
+        if (image) formData.append('image', image)
+
+        const response = await api.post<ResponseModel<void>>(`/superadmin/news`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        })
 
         if (!response.data.success) {
             throw new Error(response.data.message || 'Failed to add news')

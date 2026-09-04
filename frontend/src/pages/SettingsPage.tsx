@@ -38,8 +38,9 @@ import {
 
 interface NewsItem {
     id: number
-    message: string
+    message: string | null
     created_at: string
+    has_banner: boolean
 }
 
 export function SettingsPage() {
@@ -53,6 +54,8 @@ export function SettingsPage() {
     const [news, setNews] = useState<NewsItem[]>([])
     const [newsLoading, setNewsLoading] = useState(false)
     const [newNewsMessage, setNewNewsMessage] = useState('')
+    const [newNewsBanner, setNewNewsBanner] = useState<File | null>(null)
+    const [newNewsBannerPreview, setNewNewsBannerPreview] = useState<string | null>(null)
     const [addingNews, setAddingNews] = useState(false)
     const [newsToDelete, setNewsToDelete] = useState<number | null>(null)
     const [deletingNews, setDeletingNews] = useState(false)
@@ -193,15 +196,15 @@ export function SettingsPage() {
     }
 
     const handleAddNews = async () => {
-        if (!newNewsMessage.trim()) {
-            alert('Please enter a news message')
+        if (!newNewsMessage.trim() && !newNewsBanner) {
+            alert('Add a message, a banner image, or both')
             return
         }
 
         try {
             setAddingNews(true)
-            await superadminAPI.addNews(newNewsMessage)
-            setNewNewsMessage('')
+            await superadminAPI.addNews(newNewsMessage, newNewsBanner)
+            resetNewsForm()
             fetchNews()
         } catch (err: any) {
             console.error('Failed to add news:', err)
@@ -209,6 +212,20 @@ export function SettingsPage() {
         } finally {
             setAddingNews(false)
         }
+    }
+
+    const resetNewsForm = () => {
+        setNewNewsMessage('')
+        setNewNewsBanner(null)
+        if (newNewsBannerPreview) URL.revokeObjectURL(newNewsBannerPreview)
+        setNewNewsBannerPreview(null)
+    }
+
+    const handleNewsBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0] || null
+        if (newNewsBannerPreview) URL.revokeObjectURL(newNewsBannerPreview)
+        setNewNewsBanner(file)
+        setNewNewsBannerPreview(file ? URL.createObjectURL(file) : null)
     }
 
     const handleDeleteNews = async () => {
@@ -538,7 +555,17 @@ export function SettingsPage() {
                                         className="p-3 bg-muted rounded-md border flex items-start justify-between gap-3"
                                     >
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm break-words">{item.message}</p>
+                                            <div className="flex items-center gap-2">
+                                                {item.has_banner && (
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                                                        <ImageIcon className="h-3 w-3" />
+                                                        Banner
+                                                    </span>
+                                                )}
+                                                {item.message && (
+                                                    <p className="text-sm break-words">{item.message}</p>
+                                                )}
+                                            </div>
                                             <p className="text-xs text-muted-foreground mt-1">
                                                 {new Date(item.created_at).toLocaleString()}
                                             </p>
@@ -573,7 +600,7 @@ export function SettingsPage() {
                     </DialogHeader>
                     <div className="space-y-4">
                         <div>
-                            <label className="text-sm font-medium">Message</label>
+                            <label className="text-sm font-medium">Message (optional if a banner is attached)</label>
                             <Textarea
                                 placeholder="Enter news message..."
                                 value={newNewsMessage}
@@ -582,11 +609,44 @@ export function SettingsPage() {
                                 disabled={addingNews}
                             />
                         </div>
+                        <div>
+                            <label className="text-sm font-medium">Banner image (optional)</label>
+                            <Input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleNewsBannerChange}
+                                className="mt-2"
+                                disabled={addingNews}
+                            />
+                            {newNewsBannerPreview && (
+                                <div className="mt-3 flex items-center gap-3">
+                                    <img
+                                        src={newNewsBannerPreview}
+                                        alt="Banner preview"
+                                        className="max-h-32 rounded-md border object-contain"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            setNewNewsBanner(null)
+                                            URL.revokeObjectURL(newNewsBannerPreview)
+                                            setNewNewsBannerPreview(null)
+                                        }}
+                                        disabled={addingNews}
+                                    >
+                                        <Trash2 className="mr-1 h-4 w-4" />
+                                        Remove
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
                         <div className="flex gap-2 justify-end">
                             <Button
                                 onClick={() => {
                                     setShowAddNewsDialog(false)
-                                    setNewNewsMessage('')
+                                    resetNewsForm()
                                 }}
                                 variant="outline"
                                 disabled={addingNews}
@@ -595,7 +655,7 @@ export function SettingsPage() {
                             </Button>
                             <Button
                                 onClick={handleAddNews}
-                                disabled={addingNews || !newNewsMessage.trim()}
+                                disabled={addingNews || (!newNewsMessage.trim() && !newNewsBanner)}
                                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
                             >
                                 <Plus className="mr-2 h-4 w-4" />

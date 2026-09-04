@@ -212,18 +212,22 @@ def get_news(db: Session):
     return db.query(News).all()
 
 
-def add_news(db: Session, message: str) -> None:
+def add_news(db: Session, message: str | None) -> News:
     news = News(message=message, created_at=datetime.utcnow())
     db.add(news)
     db.commit()
     db.refresh(news)
+    return news
 
 
 def delete_news(db: Session, id: int) -> None:
+    from backend.utils.banners import delete_banner
+
     news = db.query(News).filter(News.id == id).first()
     if news:
         db.delete(news)
         db.commit()
+        delete_banner(id)
 
 
 def add_user_in_sanaei_table(db: Session, username: str, owner: str) -> None:

@@ -67,12 +67,6 @@ class ClientUpdateInput(BaseModel):
     flow: str = ""
 
 
-class NewsInput(BaseModel):
-    news: str = Field(
-        max_length=250, description="News content must be 250 characters or less"
-    )
-
-
 class BotTopupInput(BaseModel):
     telegram_id: int
     added_gb: float = Field(gt=0)

@@ -302,11 +302,17 @@ export interface MarzbanOverview {
 export const MARZBAN_PERIODS = ['1h', '7h', '1d', '3d', '1w', '1m', '3m'] as const
 export type MarzbanPeriod = typeof MARZBAN_PERIODS[number]
 
+export interface NewsFeedItem {
+    id: number
+    message: string | null
+    has_banner: boolean
+}
+
 export interface DashboardData {
     remaining_traffic?: number
     initial_traffic?: number
     expiry_time?: string
-    news?: string[]
+    news?: NewsFeedItem[]
     sub_url?: string
     users?: ClientsOutput[]
     admins?: AdminOutput[]

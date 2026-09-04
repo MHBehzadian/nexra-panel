@@ -26,8 +26,9 @@ import { dashboardAPI, userAPI } from '@/lib/api'
 import { bytesToGB, formatTraffic } from '@/lib/traffic-converter'
 import { formatDate, formatExpiryWithDays, cn } from '@/lib/utils'
 import { getUserRole } from '@/lib/auth'
-import { DashboardData, ClientsOutput, MarzbanOverview, MarzbanPeriod, MARZBAN_PERIODS } from '@/types'
+import { DashboardData, ClientsOutput, MarzbanOverview, MarzbanPeriod, MARZBAN_PERIODS, NewsFeedItem } from '@/types'
 import { Donut, Gauge, SEGMENT_COLORS } from '@/components/charts/Donut'
+import { useBannerImage } from '@/hooks/useBannerImage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -135,6 +136,109 @@ const NODE_STATUS_META: Record<string, { variant: 'default' | 'destructive' | 's
     error: { variant: 'destructive', label: 'Error' },
     disabled: { variant: 'outline', label: 'Disabled' },
     unknown: { variant: 'outline', label: 'Unknown' },
+}
+
+function NewsSlide({ item }: { item: NewsFeedItem }): JSX.Element {
+    const bannerUrl = useBannerImage(item.id, item.has_banner)
+
+    if (item.has_banner) {
+        return (
+            <div className="flex min-h-[160px] w-full flex-col items-center justify-center gap-2 px-1">
+                {bannerUrl ? (
+                    <img
+                        src={bannerUrl}
+                        alt={item.message || 'Announcement banner'}
+                        className="max-h-64 w-full rounded-lg object-contain"
+                    />
+                ) : (
+                    <div className="flex h-40 w-full animate-pulse items-center justify-center rounded-lg bg-muted">
+                        <span className="text-xs text-muted-foreground">Loading...</span>
+                    </div>
+                )}
+                {item.message && (
+                    <p
+                        className="text-center text-sm font-medium leading-relaxed text-foreground"
+                        style={{ direction: /[؀-ۿ]/.test(item.message) ? 'rtl' : 'ltr' }}
+                    >
+                        {item.message}
+                    </p>
+                )}
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex min-h-[160px] w-full items-center gap-2 px-1">
+            <Zap className="h-5 w-5 flex-shrink-0 text-primary" />
+            <div
+                className="break-words text-base font-medium leading-relaxed text-foreground"
+                style={{ direction: item.message && /[؀-ۿ]/.test(item.message) ? 'rtl' : 'ltr' }}
+            >
+                {item.message}
+            </div>
+        </div>
+    )
+}
+
+function NewsCarousel({ items }: { items: NewsFeedItem[] }): JSX.Element {
+    const [index, setIndex] = useState(0)
+
+    // Land on a valid slide if the list shrinks (an item was removed) or changes.
+    useEffect(() => {
+        setIndex((current) => (current >= items.length ? 0 : current))
+    }, [items.length])
+
+    useEffect(() => {
+        if (items.length < 2) return
+        const timer = setInterval(() => {
+            setIndex((current) => (current + 1) % items.length)
+        }, 6000)
+        return () => clearInterval(timer)
+    }, [items.length])
+
+    const goTo = (i: number) => setIndex(((i % items.length) + items.length) % items.length)
+
+    return (
+        <div>
+            <div className="overflow-hidden rounded-lg">
+                <div
+                    className="flex transition-transform duration-500 ease-out"
+                    style={{ transform: `translateX(-${index * 100}%)` }}
+                >
+                    {items.map((item) => (
+                        <div key={item.id} className="w-full flex-shrink-0">
+                            <NewsSlide item={item} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {items.length > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-2">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => goTo(index - 1)}>
+                        <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="flex items-center gap-1.5">
+                        {items.map((item, i) => (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => goTo(i)}
+                                aria-label={`Go to slide ${i + 1}`}
+                                className={cn(
+                                    'h-1.5 rounded-full transition-all',
+                                    i === index ? 'w-5 bg-primary' : 'w-1.5 bg-muted-foreground/30'
+                                )}
+                            />
+                        ))}
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => goTo(index + 1)}>
+                        <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
+            )}
+        </div>
+    )
 }
 
 export function DashboardPage() {
@@ -661,19 +765,8 @@ export function DashboardPage() {
                             News & Updates
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2">
-                        {dashboardData.news.map((newsItem, index) => (
-                            <div
-                                key={index}
-                                className="flex items-start gap-2 p-2 rounded-md hover:bg-muted/20 transition-colors duration-150"
-                                style={{ direction: /[\u0600-\u06FF]/.test(newsItem) ? 'rtl' : 'ltr' }}
-                            >
-                                <Zap className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                                <div className="text-base font-medium leading-relaxed text-foreground break-words">
-                                    {newsItem}
-                                </div>
-                            </div>
-                        ))}
+                    <CardContent>
+                        <NewsCarousel items={dashboardData.news} />
                     </CardContent>
                 </Card>
             )}
