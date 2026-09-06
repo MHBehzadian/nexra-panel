@@ -91,6 +91,24 @@ async def list_all_admins(
 
 
 @router.get(
+    "/panels",
+    description="Marzban panels a new reseller can be provisioned on",
+)
+async def list_bot_panels(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_bot_api_key),
+):
+    # Read from the panels table rather than inferring from existing admins, so a
+    # freshly added Marzban panel with no resellers yet is still offered.
+    names = [p.name for p in crud.get_all_panels(db) if p.panel_type == "marzban"]
+    return ResponseModel(
+        success=True,
+        message="Panels retrieved successfully",
+        data=sorted(names),
+    )
+
+
+@router.get(
     "/admins/credentials",
     description="List every admin's current Marzban password (bulk export for the superadmin)",
 )
@@ -277,7 +295,24 @@ async def create_admin(
         expiry_date=expiry_date,
         telegram_id=payload.telegram_id,
     )
-    crud.add_admin(db, admin_input)
+    # Marzban already has the admin at this point; if Nexra's own row fails to
+    # write, say so plainly rather than reporting a clean failure the superadmin
+    # would retry into a duplicate-username error.
+    try:
+        crud.add_admin(db, admin_input)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Nexra record failed for {payload.username} after Marzban creation: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "message": (
+                    f"The admin was created in Marzban but could not be saved in Nexra: {e}. "
+                    "Add it manually in the panel, or delete it from Marzban and try again."
+                ),
+            },
+        )
 
     logger.info(f"Bot provisioned new admin {payload.username} on panel {payload.panel}")
     return ResponseModel(
