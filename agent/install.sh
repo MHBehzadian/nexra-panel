@@ -14,7 +14,6 @@ REPO_RAW="https://raw.githubusercontent.com/MHBehzadian/nexra-panel/main/agent"
 INSTALL_DIR="/opt/nexra-agent"
 BIN_PATH="/usr/local/bin/nexra-agent"
 SERVICE_PATH="/etc/systemd/system/nexra-agent.service"
-GO_VERSION="1.22.5"
 
 PANEL_URL=""
 AGENT_TOKEN=""
@@ -37,37 +36,38 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-ARCH="$(uname -m)"
-case "$ARCH" in
-  x86_64) GOARCH="amd64" ;;
-  aarch64|arm64) GOARCH="arm64" ;;
-  *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
-esac
-
 mkdir -p "$INSTALL_DIR"
 curl -fsSL "$REPO_RAW/main.go" -o "$INSTALL_DIR/main.go"
 curl -fsSL "$REPO_RAW/go.mod" -o "$INSTALL_DIR/go.mod"
 
 GO_BIN="$(command -v go || true)"
-CLEANUP_GO=0
 if [[ -z "$GO_BIN" ]]; then
-  echo "Go toolchain not found, downloading a temporary one to build the agent..."
-  TMP_GO="/tmp/nexra-go-toolchain"
-  rm -rf "$TMP_GO"
-  mkdir -p "$TMP_GO"
-  curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz" -o /tmp/nexra-go.tar.gz
-  tar -C "$TMP_GO" -xzf /tmp/nexra-go.tar.gz
-  rm -f /tmp/nexra-go.tar.gz
-  GO_BIN="$TMP_GO/go/bin/go"
-  CLEANUP_GO=1
+  # Installed via the distro's own package manager/mirrors rather than
+  # downloading straight from go.dev's Google-hosted CDN, which is
+  # unreachable from a fair number of networks (Iran included).
+  echo "Go toolchain not found, installing it via the system package manager..."
+  if command -v apt-get &>/dev/null; then
+    apt-get update -qq && apt-get install -y golang-go
+  elif command -v dnf &>/dev/null; then
+    dnf install -y golang
+  elif command -v yum &>/dev/null; then
+    yum install -y golang
+  elif command -v apk &>/dev/null; then
+    apk add --no-cache go
+  elif command -v pacman &>/dev/null; then
+    pacman -Sy --noconfirm go
+  else
+    echo "No supported package manager found (apt/dnf/yum/apk/pacman)." >&2
+    echo "Install a Go toolchain manually, then re-run this script." >&2
+    exit 1
+  fi
+  hash -r
+  GO_BIN="$(command -v go)"
 fi
 
-echo "Building agent..."
+echo "Building agent with $("$GO_BIN" version)..."
 (cd "$INSTALL_DIR" && CGO_ENABLED=0 "$GO_BIN" build -ldflags="-s -w" -o "$BIN_PATH" main.go)
 
-if [[ "$CLEANUP_GO" -eq 1 ]]; then
-  rm -rf "$TMP_GO"
-fi
 rm -rf "$INSTALL_DIR"
 
 cat > "$SERVICE_PATH" <<EOF
