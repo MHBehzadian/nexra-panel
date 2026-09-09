@@ -50,6 +50,29 @@ class PanelOutput(BaseModel):
         from_attributes = True
 
 
+class ServerOutput(BaseModel):
+    id: int
+    name: str
+    status: str  # 'connected' | 'connecting' | 'disconnected'
+    last_seen_at: Optional[datetime] = None
+    cpu_percent: Optional[float] = None
+    cpu_cores: Optional[int] = None
+    ram_used: Optional[int] = None
+    ram_total: Optional[int] = None
+    swap_used: Optional[int] = None
+    swap_total: Optional[int] = None
+    disk_used: Optional[int] = None
+    disk_total: Optional[int] = None
+
+
+class ServerCreatedOutput(BaseModel):
+    """Returned once, right after creation - the token isn't shown again."""
+
+    id: int
+    name: str
+    token: str
+
+
 class ClientsOutput(BaseModel):
     id: int | str = 0
     uuid: str = 0

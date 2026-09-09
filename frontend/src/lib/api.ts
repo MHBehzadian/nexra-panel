@@ -10,6 +10,8 @@ import {
     AdminFormData,
     PanelFormData,
     MarzbanOverview,
+    ServerOutput,
+    ServerCreatedOutput,
 } from '@/types'
 import { gbToBytes } from './traffic-converter'
 
@@ -420,6 +422,55 @@ export const userAPI = {
 
         if (!response.data.success) {
             throw new Error(response.data.message || 'Failed to reset user usage')
+        }
+    },
+}
+
+// Server monitoring API
+export const serverAPI = {
+    getServers: async (): Promise<ServerOutput[]> => {
+        const response = await api.get<ResponseModel<ServerOutput[]>>(`/superadmin/servers`)
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to fetch servers')
+        }
+
+        return response.data.data || []
+    },
+
+    // Returns the agent token once, right after creation - the caller must
+    // show it to the admin immediately since it isn't retrievable again.
+    createServer: async (name: string): Promise<ServerCreatedOutput> => {
+        const response = await api.post<ResponseModel<ServerCreatedOutput>>(`/superadmin/servers`, { name })
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to add server')
+        }
+
+        return response.data.data!
+    },
+
+    renameServer: async (serverId: number, name: string): Promise<void> => {
+        const response = await api.put<ResponseModel<void>>(`/superadmin/servers/${serverId}`, { name })
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to rename server')
+        }
+    },
+
+    deleteServer: async (serverId: number): Promise<void> => {
+        const response = await api.delete<ResponseModel<void>>(`/superadmin/servers/${serverId}`)
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to remove server')
+        }
+    },
+
+    rebootServer: async (serverId: number): Promise<void> => {
+        const response = await api.post<ResponseModel<void>>(`/superadmin/servers/${serverId}/reboot`)
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to queue reboot')
         }
     },
 }

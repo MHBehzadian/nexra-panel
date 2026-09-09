@@ -3,11 +3,18 @@ from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.orm import Session
 import os
 
-from backend.schema.output import ResponseModel, AdminOutput, PanelOutput
+from backend.schema.output import (
+    ResponseModel,
+    AdminOutput,
+    PanelOutput,
+    ServerOutput,
+    ServerCreatedOutput,
+)
 from backend.schema._input import (
     AdminInput,
     AdminUpdateInput,
     PanelInput,
+    ServerInput,
     SettingsInput,
 )
 from backend.db import crud
@@ -25,6 +32,7 @@ from backend.utils.marzban_overview import (
 from backend.utils.settings_store import get_settings, update_settings, save_logo
 from backend.utils.banners import save_banner, delete_banner, get_banner_path
 from backend.utils.telegram import send_backup_to_telegram
+from backend.utils.servers import server_status
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
@@ -555,6 +563,21 @@ async def get_marzban_overview(
         data = await build_marzban_overview(
             api_service, panel.name, period, force=refresh
         )
+
+        # Ratio of admins who have a Nexra Panel account vs. admins that only
+        # exist in Marzban itself (created directly, never onboarded here).
+        try:
+            marzban_admins = await api_service.get_admins()
+            marzban_usernames = {a["username"] for a in marzban_admins if a.get("username")}
+            nexra_usernames = {a.username for a in crud.get_all_admins(db)}
+            data["admins"] = {
+                "nexra": len(nexra_usernames),
+                "marzban_only": len(marzban_usernames - nexra_usernames),
+            }
+        except Exception as e:
+            logger.warning(f"Failed to compute admin ratio from {panel.name}: {str(e)}")
+            data["admins"] = None
+
         return ResponseModel(
             success=True,
             message="Marzban overview retrieved successfully",
@@ -567,6 +590,103 @@ async def get_marzban_overview(
             message=f"Marzban is unreachable: {str(e)}",
             data=None,
         )
+
+
+def _server_to_output(server) -> ServerOutput:
+    return ServerOutput(
+        id=server.id,
+        name=server.name,
+        status=server_status(server),
+        last_seen_at=server.last_seen_at,
+        cpu_percent=server.cpu_percent,
+        cpu_cores=server.cpu_cores,
+        ram_used=server.ram_used,
+        ram_total=server.ram_total,
+        swap_used=server.swap_used,
+        swap_total=server.swap_total,
+        disk_used=server.disk_used,
+        disk_total=server.disk_total,
+    )
+
+
+@router.get("/servers", description="Get all monitored servers")
+async def get_servers(
+    db: Session = Depends(get_db), current_admin: dict = Depends(get_current_superadmin)
+):
+    servers = crud.get_all_servers(db)
+    return ResponseModel(
+        success=True,
+        message="Servers retrieved successfully",
+        data=[_server_to_output(s) for s in servers],
+    )
+
+
+@router.post("/servers", description="Add a server to monitor")
+async def create_server(
+    server_input: ServerInput,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_current_superadmin),
+):
+    if any(s.name == server_input.name for s in crud.get_all_servers(db)):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"success": False, "message": "A server with this name already exists"},
+        )
+
+    server = crud.add_server(db, server_input.name)
+    logger.info(f"New monitored server added: {server.name}")
+    return ResponseModel(
+        success=True,
+        message="Server added successfully",
+        data=ServerCreatedOutput(id=server.id, name=server.name, token=server.token),
+    )
+
+
+@router.put("/servers/{server_id}", description="Rename a monitored server")
+async def rename_server(
+    server_id: int,
+    server_input: ServerInput,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_current_superadmin),
+):
+    if not crud.rename_server(db, server_id, server_input.name):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"success": False, "message": "Server not found"},
+        )
+    return ResponseModel(success=True, message="Server renamed successfully")
+
+
+@router.delete("/servers/{server_id}", description="Stop monitoring a server")
+async def delete_server(
+    server_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_current_superadmin),
+):
+    if not crud.remove_server(db, server_id):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"success": False, "message": "Server not found"},
+        )
+    return ResponseModel(success=True, message="Server removed successfully")
+
+
+@router.post("/servers/{server_id}/reboot", description="Queue a reboot for a server")
+async def reboot_server(
+    server_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_current_superadmin),
+):
+    if not crud.request_server_reboot(db, server_id):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"success": False, "message": "Server not found"},
+        )
+    logger.info(f"Reboot requested for server #{server_id} by {admin.get('username')}")
+    return ResponseModel(
+        success=True,
+        message="Reboot queued - it will run on the server's next check-in",
+    )
 
 
 @router.get("/settings", description="Get panel settings")

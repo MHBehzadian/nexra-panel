@@ -297,6 +297,11 @@ export interface MarzbanOverview {
         total: number
         items: MarzbanNodeUsage[]
     }
+    /** null when the ratio couldn't be computed (Marzban admin list unreachable). */
+    admins: {
+        nexra: number
+        marzban_only: number
+    } | null
 }
 
 export const MARZBAN_PERIODS = ['1h', '7h', '1d', '3d', '1w', '1m', '3m'] as const
@@ -306,6 +311,29 @@ export interface NewsFeedItem {
     id: number
     message: string | null
     has_banner: boolean
+}
+
+export type ServerStatus = 'connected' | 'connecting' | 'disconnected'
+
+export interface ServerOutput {
+    id: number
+    name: string
+    status: ServerStatus
+    last_seen_at?: string | null
+    cpu_percent?: number | null
+    cpu_cores?: number | null
+    ram_used?: number | null
+    ram_total?: number | null
+    swap_used?: number | null
+    swap_total?: number | null
+    disk_used?: number | null
+    disk_total?: number | null
+}
+
+export interface ServerCreatedOutput {
+    id: number
+    name: string
+    token: string
 }
 
 export interface DashboardData {
@@ -318,17 +346,4 @@ export interface DashboardData {
     admins?: AdminOutput[]
     panels?: PanelOutput[]
     system?: SystemInfo
-    ads?: {
-        title?: string
-        text?: string
-        link?: string
-        button?: string
-    }
-}
-
-export interface AdsData {
-    title?: string
-    text?: string
-    link?: string
-    button?: string
 }

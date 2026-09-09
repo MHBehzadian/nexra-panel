@@ -11,7 +11,6 @@ import {
     Trash2,
     RotateCcw,
     UserX,
-    ExternalLink,
     Server,
     Clock,
     Wifi,
@@ -22,13 +21,14 @@ import {
     Power,
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
-import { dashboardAPI, userAPI } from '@/lib/api'
+import { dashboardAPI, userAPI, serverAPI } from '@/lib/api'
 import { bytesToGB, formatTraffic } from '@/lib/traffic-converter'
 import { formatDate, formatExpiryWithDays, cn } from '@/lib/utils'
 import { getUserRole } from '@/lib/auth'
-import { DashboardData, ClientsOutput, MarzbanOverview, MarzbanPeriod, MARZBAN_PERIODS, NewsFeedItem } from '@/types'
+import { DashboardData, ClientsOutput, MarzbanOverview, MarzbanPeriod, MARZBAN_PERIODS, NewsFeedItem, ServerOutput } from '@/types'
 import { Donut, Gauge, SEGMENT_COLORS } from '@/components/charts/Donut'
 import { useBannerImage } from '@/hooks/useBannerImage'
+import { ManageServersDialog } from './components/ManageServersDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -136,6 +136,25 @@ const NODE_STATUS_META: Record<string, { variant: 'default' | 'destructive' | 's
     error: { variant: 'destructive', label: 'Error' },
     disabled: { variant: 'outline', label: 'Disabled' },
     unknown: { variant: 'outline', label: 'Unknown' },
+}
+
+const SERVER_STATUS_META: Record<string, { dot: string; label: string }> = {
+    connected: { dot: 'bg-emerald-500', label: 'Connected' },
+    connecting: { dot: 'bg-amber-500', label: 'Connecting' },
+    disconnected: { dot: 'bg-destructive', label: 'Disconnected' },
+}
+
+/** Small pulsing dot showing whether a server's agent is reporting in. */
+function ServerStatusDot({ status }: { status: string }) {
+    const meta = SERVER_STATUS_META[status] || SERVER_STATUS_META.disconnected
+    return (
+        <span className="relative flex h-2.5 w-2.5 shrink-0" title={meta.label}>
+            {status !== 'disconnected' && (
+                <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', meta.dot)} />
+            )}
+            <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full', meta.dot)} />
+        </span>
+    )
 }
 
 function NewsSlide({ item }: { item: NewsFeedItem }): JSX.Element {
@@ -261,6 +280,9 @@ export function DashboardPage() {
         const saved = localStorage.getItem('usersPerPage')
         return saved ? parseInt(saved, 10) : 5
     })
+    const [servers, setServers] = useState<ServerOutput[]>([])
+    const [showManageServers, setShowManageServers] = useState(false)
+    const [serverToReboot, setServerToReboot] = useState<number | null>(null)
 
     // Save usersPerPage to localStorage whenever it changes
     useEffect(() => {
@@ -325,6 +347,36 @@ export function DashboardPage() {
 
         return () => clearInterval(interval)
     }, [userRole])
+
+    // Monitored servers: the agent heartbeats every ~10s, so polling faster
+    // than that would only ever return the same row again.
+    const fetchServers = async () => {
+        try {
+            setServers(await serverAPI.getServers())
+        } catch (err) {
+            console.warn('Failed to fetch servers:', err)
+        }
+    }
+
+    useEffect(() => {
+        if (userRole !== 'superadmin') return
+
+        fetchServers()
+        const interval = setInterval(fetchServers, 10000)
+        return () => clearInterval(interval)
+    }, [userRole])
+
+    const handleRebootServer = async () => {
+        if (!serverToReboot) return
+        try {
+            await serverAPI.rebootServer(serverToReboot)
+            setServerToReboot(null)
+            fetchServers()
+        } catch (err: any) {
+            console.error('Failed to queue reboot:', err)
+            alert(err?.message || 'Failed to queue reboot')
+        }
+    }
 
     const fetchDashboardData = async () => {
         try {
@@ -426,6 +478,55 @@ export function DashboardPage() {
             </div>
         )
     }
+
+    // Shared between the "beside Nodes Usage" desktop layout and the
+    // standalone fallback grid used when Marzban is unreachable.
+    const panelStatCards = (
+        <>
+            {dashboardData?.panels && (
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Panels</CardTitle>
+                        <Server className="h-4 w-4 text-primary" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{dashboardData.panels.length}</div>
+                        <p className="text-xs text-muted-foreground">Configured panels</p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {dashboardData?.admins && (
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Active Admins</CardTitle>
+                        <Users className="h-4 w-4 text-green-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {dashboardData.admins.filter(a => a.is_active).length}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Active administrators</p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {dashboardData?.admins && (
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Inactive Admins</CardTitle>
+                        <UserX className="h-4 w-4 text-red-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-destructive">
+                            {dashboardData.admins.filter(a => !a.is_active).length}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Inactive administrators</p>
+                    </CardContent>
+                </Card>
+            )}
+        </>
+    )
 
     return (
         <div className="space-y-6 p-4 md:p-6 max-w-full overflow-x-hidden">
@@ -549,158 +650,130 @@ export function DashboardPage() {
                                     size={104}
                                     thickness={13}
                                     segments={[
-                                        { label: 'Used', value: marzban.memory.used, color: 'hsl(var(--brand-blue))' },
+                                        { label: 'Nexra Panel', value: marzban.admins?.nexra ?? 0, color: 'hsl(var(--brand-blue))' },
                                         {
-                                            label: 'Free',
-                                            value: Math.max(0, marzban.memory.total - marzban.memory.used),
+                                            label: 'Marzban only',
+                                            value: marzban.admins?.marzban_only ?? 0,
                                             color: 'hsl(var(--muted-foreground) / 0.25)',
                                         },
                                     ]}
                                 />
                                 <div className="min-w-0">
-                                    <p className="text-xs font-extrabold text-muted-foreground">Marzban Memory</p>
+                                    <p className="text-xs font-extrabold text-muted-foreground">Nexra vs Marzban Admins</p>
                                     <p className="text-2xl font-black tabular leading-tight">
-                                        {bytesToGB(marzban.memory.used).toFixed(1)}
-                                        <span className="text-base font-bold text-muted-foreground">
-                                            {' / '}{bytesToGB(marzban.memory.total).toFixed(1)} GB
-                                        </span>
+                                        {marzban.admins ? (
+                                            <>
+                                                {marzban.admins.nexra}
+                                                <span className="text-base font-bold text-muted-foreground">
+                                                    {' / '}{marzban.admins.marzban_only}
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <span className="text-muted-foreground">N/A</span>
+                                        )}
                                     </p>
                                     <p className="text-xs text-muted-foreground">
-                                        CPU {marzban.cpu.usage.toFixed(1)}% - {marzban.cpu.cores} cores
+                                        Nexra Panel / Marzban-only
                                     </p>
                                 </div>
                             </CardContent>
                         </Card>
                     </div>
 
-                    {/* Nodes usage */}
-                    <Card>
-                        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <CardTitle className="text-base">Nodes Usage</CardTitle>
-                            <div className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
-                                {MARZBAN_PERIODS.map((period) => (
-                                    <button
-                                        key={period}
-                                        type="button"
-                                        onClick={() => setMarzbanPeriod(period)}
-                                        className={cn(
-                                            'min-w-11 rounded-lg px-3 py-1.5 text-xs font-extrabold transition-colors',
-                                            marzbanPeriod === period
-                                                ? 'bg-brand-blue text-white shadow-sm'
-                                                : 'text-muted-foreground hover:text-foreground'
-                                        )}
-                                    >
-                                        {period}
-                                    </button>
-                                ))}
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            {marzban.nodes.items.length === 0 ? (
-                                <p className="py-8 text-center text-sm text-muted-foreground">
-                                    No node traffic recorded in this window.
-                                </p>
-                            ) : (
-                                <div className="flex flex-col items-center gap-8 md:flex-row md:justify-center">
-                                    <Donut
-                                        segments={marzban.nodes.items.map((node) => ({
-                                            label: node.name,
-                                            value: node.usage,
-                                        }))}
-                                        centerLabel={formatTraffic(marzban.nodes.total)}
-                                        centerCaption="Total"
-                                    />
-
-                                    <div className="w-full max-w-sm space-y-2">
-                                        {marzban.nodes.items.map((node, index) => {
-                                            const share = marzban.nodes.total
-                                                ? (node.usage / marzban.nodes.total) * 100
-                                                : 0
-                                            const status = NODE_STATUS_META[node.status] || NODE_STATUS_META.unknown
-                                            return (
-                                                <div
-                                                    key={`${node.name}-${index}`}
-                                                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5"
-                                                >
-                                                    <span
-                                                        className="h-3 w-3 shrink-0 rounded-full"
-                                                        style={{
-                                                            backgroundColor:
-                                                                SEGMENT_COLORS[index % SEGMENT_COLORS.length],
-                                                        }}
-                                                    />
-                                                    <span className="min-w-0 flex-1 truncate text-sm font-bold">
-                                                        {node.name}
-                                                    </span>
-                                                    <Badge variant={status.variant} className="text-[10px]">
-                                                        {status.label}
-                                                    </Badge>
-                                                    <span className="tabular text-sm font-extrabold">
-                                                        {formatTraffic(node.usage)}
-                                                    </span>
-                                                    <span className="tabular w-12 text-left text-xs text-muted-foreground">
-                                                        {share.toFixed(1)}%
-                                                    </span>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
                 </div>
             )}
 
-            {/* SuperAdmin Stats Row */}
+            {/* Nodes Usage (left) + panel stat cards (right) on desktop; stacked on mobile */}
             {userRole === 'superadmin' && dashboardData && (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {/* Total Panels */}
-                    {dashboardData.panels && (
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Total Panels</CardTitle>
-                                <Server className="h-4 w-4 text-primary" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{dashboardData.panels.length}</div>
-                                <p className="text-xs text-muted-foreground">Configured panels</p>
-                            </CardContent>
-                        </Card>
-                    )}
+                marzban ? (
+                    <div className="grid gap-4 lg:grid-cols-3">
+                        <div className="lg:col-span-2">
+                            <Card>
+                                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <CardTitle className="text-base">Nodes Usage</CardTitle>
+                                    <div className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+                                        {MARZBAN_PERIODS.map((period) => (
+                                            <button
+                                                key={period}
+                                                type="button"
+                                                onClick={() => setMarzbanPeriod(period)}
+                                                className={cn(
+                                                    'min-w-11 rounded-lg px-3 py-1.5 text-xs font-extrabold transition-colors',
+                                                    marzbanPeriod === period
+                                                        ? 'bg-brand-blue text-white shadow-sm'
+                                                        : 'text-muted-foreground hover:text-foreground'
+                                                )}
+                                            >
+                                                {period}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    {marzban.nodes.items.length === 0 ? (
+                                        <p className="py-8 text-center text-sm text-muted-foreground">
+                                            No node traffic recorded in this window.
+                                        </p>
+                                    ) : (
+                                        <div className="flex flex-col items-center gap-8 md:flex-row md:justify-center">
+                                            <Donut
+                                                segments={marzban.nodes.items.map((node) => ({
+                                                    label: node.name,
+                                                    value: node.usage,
+                                                }))}
+                                                centerLabel={formatTraffic(marzban.nodes.total)}
+                                                centerCaption="Total"
+                                            />
 
-                    {/* Total Active Admins */}
-                    {dashboardData.admins && (
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Total Active Admins</CardTitle>
-                                <Users className="h-4 w-4 text-green-500" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {dashboardData.admins.filter(a => a.is_active).length}
-                                </div>
-                                <p className="text-xs text-muted-foreground">Active administrators</p>
-                            </CardContent>
-                        </Card>
-                    )}
+                                            <div className="w-full max-w-sm space-y-2">
+                                                {marzban.nodes.items.map((node, index) => {
+                                                    const share = marzban.nodes.total
+                                                        ? (node.usage / marzban.nodes.total) * 100
+                                                        : 0
+                                                    const status = NODE_STATUS_META[node.status] || NODE_STATUS_META.unknown
+                                                    return (
+                                                        <div
+                                                            key={`${node.name}-${index}`}
+                                                            className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5"
+                                                        >
+                                                            <span
+                                                                className="h-3 w-3 shrink-0 rounded-full"
+                                                                style={{
+                                                                    backgroundColor:
+                                                                        SEGMENT_COLORS[index % SEGMENT_COLORS.length],
+                                                                }}
+                                                            />
+                                                            <span className="min-w-0 flex-1 truncate text-sm font-bold">
+                                                                {node.name}
+                                                            </span>
+                                                            <Badge variant={status.variant} className="text-[10px]">
+                                                                {status.label}
+                                                            </Badge>
+                                                            <span className="tabular text-sm font-extrabold">
+                                                                {formatTraffic(node.usage)}
+                                                            </span>
+                                                            <span className="tabular w-12 text-left text-xs text-muted-foreground">
+                                                                {share.toFixed(1)}%
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
 
-                    {/* Total Inactive Admins */}
-                    {dashboardData.admins && (
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Total Inactive Admins</CardTitle>
-                                <UserX className="h-4 w-4 text-red-500" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold text-destructive">
-                                    {dashboardData.admins.filter(a => !a.is_active).length}
-                                </div>
-                                <p className="text-xs text-muted-foreground">Inactive administrators</p>
-                            </CardContent>
-                        </Card>
-                    )}
-                </div>
+                        <div className="grid gap-4 content-start sm:grid-cols-2 lg:grid-cols-1">
+                            {panelStatCards}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {panelStatCards}
+                    </div>
+                )
             )}
 
             {/* System Stats Row - panel host resources */}
@@ -752,6 +825,105 @@ export function DashboardPage() {
                                 caption={`${bytesToGB(dashboardData.system.disk_used).toFixed(2)} GB / ${bytesToGB(dashboardData.system.disk_total).toFixed(2)} GB`}
                             />
                         </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Servers - monitored via the lightweight Nexra agent */}
+            {userRole === 'superadmin' && (
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-base">Servers</CardTitle>
+                        <div className="flex items-center gap-1">
+                            <Button size="sm" variant="ghost" onClick={fetchServers} title="Refresh">
+                                <RefreshCw className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setShowManageServers(true)} title="Manage servers">
+                                <Edit2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {servers.length === 0 ? (
+                            <p className="py-6 text-center text-sm text-muted-foreground">
+                                No servers added yet. Use the pencil icon above to add one.
+                            </p>
+                        ) : (
+                            <div className="divide-y">
+                                {servers.map((server) => {
+                                    const ramPercent = server.ram_total ? ((server.ram_used || 0) / server.ram_total) * 100 : null
+                                    const diskPercent = server.disk_total ? ((server.disk_used || 0) / server.disk_total) * 100 : null
+                                    const hasMetrics = server.status !== 'disconnected' || server.last_seen_at
+
+                                    return (
+                                        <div
+                                            key={server.id}
+                                            className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3"
+                                        >
+                                            <div className="flex min-w-[140px] flex-1 items-center gap-2">
+                                                <ServerStatusDot status={server.status} />
+                                                <span className="truncate text-sm font-bold">{server.name}</span>
+                                            </div>
+
+                                            {hasMetrics && server.cpu_percent !== null && server.cpu_percent !== undefined ? (
+                                                <>
+                                                    <div className="w-20 text-xs">
+                                                        <div className="text-muted-foreground">CPU</div>
+                                                        <div className="font-extrabold tabular">{server.cpu_percent.toFixed(0)}%</div>
+                                                    </div>
+                                                    <div className="w-32 text-xs">
+                                                        <div className="text-muted-foreground">RAM</div>
+                                                        <div className="font-extrabold tabular">
+                                                            {server.ram_used !== undefined && server.ram_used !== null
+                                                                ? `${bytesToGB(server.ram_used).toFixed(1)} / ${bytesToGB(server.ram_total || 0).toFixed(1)} GB`
+                                                                : '—'}
+                                                        </div>
+                                                        {ramPercent !== null && (
+                                                            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                                                <div
+                                                                    className={cn('h-full bg-primary', ramPercent > 90 && 'bg-destructive')}
+                                                                    style={{ width: `${Math.min(ramPercent, 100)}%` }}
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="w-32 text-xs">
+                                                        <div className="text-muted-foreground">Storage</div>
+                                                        <div className="font-extrabold tabular">
+                                                            {server.disk_used !== undefined && server.disk_used !== null
+                                                                ? `${bytesToGB(server.disk_used).toFixed(1)} / ${bytesToGB(server.disk_total || 0).toFixed(1)} GB`
+                                                                : '—'}
+                                                        </div>
+                                                        {diskPercent !== null && (
+                                                            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                                                <div
+                                                                    className={cn('h-full bg-primary', diskPercent > 90 && 'bg-destructive')}
+                                                                    style={{ width: `${Math.min(diskPercent, 100)}%` }}
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">
+                                                    {server.status === 'connecting' ? 'Waiting for first check-in...' : 'No data'}
+                                                </span>
+                                            )}
+
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="ml-auto"
+                                                onClick={() => setServerToReboot(server.id)}
+                                            >
+                                                <RotateCcw className="h-4 w-4 mr-2" />
+                                                Reboot
+                                            </Button>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             )}
@@ -844,41 +1016,6 @@ export function DashboardPage() {
                         </CardContent>
                     </Card>
                 </div>
-            )}
-
-            {/* Advertisement Card */}
-            {dashboardData?.ads && dashboardData.ads.text && (
-                <Card className="bg-primary/5 border-primary/30 relative">
-                    <CardContent className="p-4 pt-8">
-                        <a
-                            href={dashboardData.ads.link || '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block group"
-                        >
-                            <div className="flex flex-col gap-2" dir="rtl">
-                                <div className="flex-1 min-w-0" dir="rtl">
-                                    {dashboardData.ads.title && (
-                                        <h3 className="font-bold text-primary text-sm mb-1 group-hover:text-primary/80 transition-colors" dir="rtl">
-                                            {dashboardData.ads.title}
-                                        </h3>
-                                    )}
-                                    <p className="text-sm text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors" dir="rtl">
-                                        {dashboardData.ads.text}
-                                    </p>
-                                    {dashboardData.ads.button && (
-                                        <div className="mt-3 flex justify-start">
-                                            <span className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold rounded-lg transition-all duration-200 transform hover:scale-105" dir="rtl">
-                                                <ExternalLink className="h-4 w-4" />
-                                                {dashboardData.ads.button}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </a>
-                    </CardContent>
-                </Card>
             )}
 
             {/* Users Table */}
@@ -1173,6 +1310,31 @@ export function DashboardPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Manage Servers Dialog */}
+            <ManageServersDialog
+                isOpen={showManageServers}
+                onClose={() => setShowManageServers(false)}
+                onChanged={fetchServers}
+            />
+
+            {/* Reboot Server Confirmation */}
+            <AlertDialog open={!!serverToReboot} onOpenChange={() => serverToReboot && setServerToReboot(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Reboot this server?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            It will restart as soon as its agent picks up the request, usually within a few seconds. Any active connections on it will drop.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="flex justify-end gap-3">
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleRebootServer} className="bg-destructive">
+                            Reboot
+                        </AlertDialogAction>
+                    </div>
+                </AlertDialogContent>
+            </AlertDialog>
         </div >
     )
 }

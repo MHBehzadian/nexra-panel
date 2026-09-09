@@ -101,6 +101,26 @@ class BotGrantInput(BaseModel):
     added_gb: float = Field(gt=0)
 
 
+class ServerInput(BaseModel):
+    name: str = Field(min_length=1)
+
+
+class ServerHeartbeatInput(BaseModel):
+    """Reported by the agent on every heartbeat. Bandwidth is deliberately
+    not collected - tracking per-interface counters would add another
+    always-on sampling loop to the agent for a number the dashboard doesn't
+    need."""
+
+    cpu_percent: float = Field(ge=0)
+    cpu_cores: int = Field(ge=0)
+    ram_used: int = Field(ge=0)
+    ram_total: int = Field(ge=0)
+    swap_used: int = Field(ge=0)
+    swap_total: int = Field(ge=0)
+    disk_used: int = Field(ge=0)
+    disk_total: int = Field(ge=0)
+
+
 class SettingsInput(BaseModel):
     login_title: Optional[str] = None
     telegram_bot_token: Optional[str] = None

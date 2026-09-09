@@ -1,7 +1,8 @@
 from datetime import datetime
+from secrets import token_hex
 from sqlalchemy.orm import Session
 
-from backend.db.model import Admins, Panels, News, SanaeiUsers
+from backend.db.model import Admins, Panels, News, SanaeiUsers, Servers
 from backend.schema._input import AdminInput, AdminUpdateInput, PanelInput
 from backend.auth.hash import hash_password
 
@@ -206,6 +207,74 @@ def change_panel_status(db: Session, panel_id: int) -> bool:
         db.commit()
         return True
     return False
+
+
+def get_all_servers(db: Session):
+    return db.query(Servers).order_by(Servers.name).all()
+
+
+def get_server_by_id(db: Session, server_id: int) -> Servers | None:
+    return db.query(Servers).filter(Servers.id == server_id).first()
+
+
+def get_server_by_token(db: Session, token: str) -> Servers | None:
+    return db.query(Servers).filter(Servers.token == token).first()
+
+
+def add_server(db: Session, name: str) -> Servers:
+    server = Servers(name=name, token=token_hex(24))
+    db.add(server)
+    db.commit()
+    db.refresh(server)
+    return server
+
+
+def rename_server(db: Session, server_id: int, name: str) -> bool:
+    server = get_server_by_id(db, server_id)
+    if server:
+        server.name = name
+        db.commit()
+        return True
+    return False
+
+
+def remove_server(db: Session, server_id: int) -> bool:
+    server = get_server_by_id(db, server_id)
+    if server:
+        db.delete(server)
+        db.commit()
+        return True
+    return False
+
+
+def request_server_reboot(db: Session, server_id: int) -> bool:
+    server = get_server_by_id(db, server_id)
+    if server:
+        server.reboot_requested = True
+        db.commit()
+        return True
+    return False
+
+
+def record_server_heartbeat(db: Session, server: Servers, metrics: dict) -> bool:
+    """Applies one agent heartbeat and returns whether a reboot is pending
+    (and clears it - the agent is expected to act on it right away)."""
+    server.last_seen_at = datetime.utcnow()
+    server.cpu_percent = metrics.get("cpu_percent")
+    server.cpu_cores = metrics.get("cpu_cores")
+    server.ram_used = metrics.get("ram_used")
+    server.ram_total = metrics.get("ram_total")
+    server.swap_used = metrics.get("swap_used")
+    server.swap_total = metrics.get("swap_total")
+    server.disk_used = metrics.get("disk_used")
+    server.disk_total = metrics.get("disk_total")
+
+    reboot_pending = bool(server.reboot_requested)
+    if reboot_pending:
+        server.reboot_requested = False
+
+    db.commit()
+    return reboot_pending
 
 
 def get_news(db: Session):
