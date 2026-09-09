@@ -693,7 +693,7 @@ export function DashboardPage() {
             {/* Nodes Usage (left) + panel stat cards (right) on desktop; stacked on mobile */}
             {userRole === 'superadmin' && dashboardData && (
                 marzban ? (
-                    <div className="grid gap-4 lg:grid-cols-3">
+                    <div className="grid items-start gap-4 lg:grid-cols-3">
                         <div className="lg:col-span-2">
                             <Card>
                                 <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -866,9 +866,9 @@ export function DashboardPage() {
                                     return (
                                         <div
                                             key={server.id}
-                                            className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3"
+                                            className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3"
                                         >
-                                            <div className="flex min-w-[140px] flex-1 items-center gap-2">
+                                            <div className="flex w-full shrink-0 items-center gap-2 sm:w-36">
                                                 <ServerStatusDot status={server.status} />
                                                 <span className="truncate text-sm font-bold">{server.name}</span>
                                             </div>
