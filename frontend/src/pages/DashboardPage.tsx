@@ -164,6 +164,11 @@ function NewsSlide({ item }: { item: NewsFeedItem }): JSX.Element {
     // so it always fills the frame (object-cover crops instead of
     // letterboxing), and rounded corners on the image itself rather than a
     // visible card border around it.
+    // Capped height rather than a fixed aspect ratio: on a wide desktop
+    // viewport a 21:9 box scaled to full width would tower over the rest of
+    // the dashboard. Height grows a little across breakpoints instead,
+    // cropping width via object-cover - the way a video thumbnail stays a
+    // sane size regardless of how wide its container is.
     if (item.has_banner) {
         return (
             <div className="w-full">
@@ -171,10 +176,10 @@ function NewsSlide({ item }: { item: NewsFeedItem }): JSX.Element {
                     <img
                         src={bannerUrl}
                         alt={item.message || 'Announcement banner'}
-                        className="aspect-[21/9] w-full rounded-lg object-cover"
+                        className="h-36 w-full rounded-lg object-cover sm:h-44 md:h-52 lg:h-60"
                     />
                 ) : (
-                    <div className="flex aspect-[21/9] w-full animate-pulse items-center justify-center rounded-lg bg-muted">
+                    <div className="flex h-36 w-full animate-pulse items-center justify-center rounded-lg bg-muted sm:h-44 md:h-52 lg:h-60">
                         <span className="text-xs text-muted-foreground">Loading...</span>
                     </div>
                 )}
