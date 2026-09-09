@@ -160,23 +160,27 @@ function ServerStatusDot({ status }: { status: string }) {
 function NewsSlide({ item }: { item: NewsFeedItem }): JSX.Element {
     const bannerUrl = useBannerImage(item.id, item.has_banner)
 
+    // Edge-to-edge: no card padding around the image, a fixed banner ratio
+    // so it always fills the frame (object-cover crops instead of
+    // letterboxing), and rounded corners on the image itself rather than a
+    // visible card border around it.
     if (item.has_banner) {
         return (
-            <div className="flex min-h-[160px] w-full flex-col items-center justify-center gap-2 px-1">
+            <div className="w-full">
                 {bannerUrl ? (
                     <img
                         src={bannerUrl}
                         alt={item.message || 'Announcement banner'}
-                        className="max-h-64 w-full rounded-lg object-contain"
+                        className="aspect-[21/9] w-full rounded-lg object-cover"
                     />
                 ) : (
-                    <div className="flex h-40 w-full animate-pulse items-center justify-center rounded-lg bg-muted">
+                    <div className="flex aspect-[21/9] w-full animate-pulse items-center justify-center rounded-lg bg-muted">
                         <span className="text-xs text-muted-foreground">Loading...</span>
                     </div>
                 )}
                 {item.message && (
                     <p
-                        className="text-center text-sm font-medium leading-relaxed text-foreground"
+                        className="px-6 pt-3 text-center text-sm font-medium leading-relaxed text-foreground"
                         style={{ direction: /[؀-ۿ]/.test(item.message) ? 'rtl' : 'ltr' }}
                     >
                         {item.message}
@@ -187,7 +191,7 @@ function NewsSlide({ item }: { item: NewsFeedItem }): JSX.Element {
     }
 
     return (
-        <div className="flex min-h-[160px] w-full items-center gap-2 px-1">
+        <div className="flex min-h-[160px] w-full items-center gap-2 px-6">
             <Zap className="h-5 w-5 flex-shrink-0 text-primary" />
             <div
                 className="break-words text-base font-medium leading-relaxed text-foreground"
@@ -219,7 +223,7 @@ function NewsCarousel({ items }: { items: NewsFeedItem[] }): JSX.Element {
 
     return (
         <div>
-            <div className="overflow-hidden rounded-lg">
+            <div className="overflow-hidden">
                 <div
                     className="flex transition-transform duration-500 ease-out"
                     style={{ transform: `translateX(-${index * 100}%)` }}
@@ -233,7 +237,7 @@ function NewsCarousel({ items }: { items: NewsFeedItem[] }): JSX.Element {
             </div>
 
             {items.length > 1 && (
-                <div className="flex items-center justify-center gap-3 pt-2">
+                <div className="flex items-center justify-center gap-3 px-6 pt-3">
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => goTo(index - 1)}>
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -948,7 +952,7 @@ export function DashboardPage() {
                             News & Updates
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-0 pb-4">
                         <NewsCarousel items={dashboardData.news} />
                     </CardContent>
                 </Card>
