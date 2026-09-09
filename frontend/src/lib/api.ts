@@ -84,13 +84,17 @@ export const dashboardAPI = {
     // the panel is unreachable, so the dashboard just hides the section.
     // `force` skips the backend's online-user cache, so a manual refresh
     // really does refetch rather than replaying a cached count.
+    // `includeAdmins` asks the backend to also compute the Nexra-vs-Marzban
+    // admin ratio, which costs an extra Marzban API call - only worth it on
+    // page load / manual refresh, not the silent 30s poll.
     getMarzbanOverview: async (
         period: string = '1d',
-        force: boolean = false
+        force: boolean = false,
+        includeAdmins: boolean = false
     ): Promise<MarzbanOverview | null> => {
         const response = await api.get<ResponseModel<MarzbanOverview | null>>(
             `/superadmin/marzban/overview`,
-            { params: force ? { period, refresh: true } : { period } }
+            { params: { period, ...(force ? { refresh: true } : {}), ...(includeAdmins ? { include_admins: true } : {}) } }
         )
 
         return response.data.data ?? null

@@ -297,8 +297,13 @@ export interface MarzbanOverview {
         total: number
         items: MarzbanNodeUsage[]
     }
-    /** null when the ratio couldn't be computed (Marzban admin list unreachable). */
-    admins: {
+    /**
+     * Omitted entirely when the caller didn't ask for it (the silent 30s
+     * poll skips it to save an extra Marzban call) - the frontend keeps
+     * showing the last-known ratio in that case. null means it was asked
+     * for but couldn't be computed (Marzban admin list unreachable).
+     */
+    admins?: {
         nexra: number
         marzban_only: number
     } | null

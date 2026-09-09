@@ -529,6 +529,9 @@ async def get_system_info_endpoint(
 async def get_marzban_overview(
     period: str = "1d",
     refresh: bool = False,
+    # The admin ratio costs an extra Marzban API call, so the frontend only
+    # asks for it on page load / manual refresh - not on the silent 30s poll.
+    include_admins: bool = False,
     db: Session = Depends(get_db),
     current_admin: dict = Depends(get_current_superadmin),
 ):
@@ -566,17 +569,21 @@ async def get_marzban_overview(
 
         # Ratio of admins who have a Nexra Panel account vs. admins that only
         # exist in Marzban itself (created directly, never onboarded here).
-        try:
-            marzban_admins = await api_service.get_admins()
-            marzban_usernames = {a["username"] for a in marzban_admins if a.get("username")}
-            nexra_usernames = {a.username for a in crud.get_all_admins(db)}
-            data["admins"] = {
-                "nexra": len(nexra_usernames),
-                "marzban_only": len(marzban_usernames - nexra_usernames),
-            }
-        except Exception as e:
-            logger.warning(f"Failed to compute admin ratio from {panel.name}: {str(e)}")
-            data["admins"] = None
+        # Left out of the payload entirely (not even null) when not asked
+        # for, so the frontend knows to keep showing its last-known value
+        # instead of reading an absent ratio as "failed".
+        if include_admins:
+            try:
+                marzban_admins = await api_service.get_admins()
+                marzban_usernames = {a["username"] for a in marzban_admins if a.get("username")}
+                nexra_usernames = {a.username for a in crud.get_all_admins(db)}
+                data["admins"] = {
+                    "nexra": len(nexra_usernames),
+                    "marzban_only": len(marzban_usernames - nexra_usernames),
+                }
+            except Exception as e:
+                logger.warning(f"Failed to compute admin ratio from {panel.name}: {str(e)}")
+                data["admins"] = None
 
         return ResponseModel(
             success=True,

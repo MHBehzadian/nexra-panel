@@ -302,23 +302,30 @@ export function DashboardPage() {
 
         let cancelled = false
 
-        const load = async () => {
+        // includeAdmins only on page load / period change - the silent 30s
+        // poll skips it and the merge below keeps showing the last ratio.
+        const load = async (includeAdmins: boolean) => {
             try {
-                const overview = await dashboardAPI.getMarzbanOverview(marzbanPeriod)
-                if (!cancelled) setMarzban(overview)
+                const overview = await dashboardAPI.getMarzbanOverview(marzbanPeriod, false, includeAdmins)
+                if (cancelled) return
+                setMarzban((current) =>
+                    overview && overview.admins === undefined
+                        ? { ...overview, admins: current?.admins }
+                        : overview
+                )
             } catch (err) {
                 console.warn('Failed to fetch Marzban overview:', err)
             }
         }
 
-        load()
-        const interval = setInterval(load, 30000)
+        load(true)
+        const interval = setInterval(() => load(false), 30000)
 
         // The very first request only kicks the online scan off; poll briefly
         // until it lands instead of showing a blank tile for half a minute.
         const settle = setInterval(() => {
             setMarzban((current) => {
-                if (current && current.users.online === null) load()
+                if (current && current.users.online === null) load(false)
                 return current
             })
         }, 5000)
@@ -434,7 +441,7 @@ export function DashboardPage() {
         setStatsRefreshing(true)
         try {
             const [overview, systemInfo] = await Promise.all([
-                dashboardAPI.getMarzbanOverview(marzbanPeriod, true),
+                dashboardAPI.getMarzbanOverview(marzbanPeriod, true, true),
                 dashboardAPI.getSystemInfo().catch(() => null),
             ])
             setMarzban(overview)
