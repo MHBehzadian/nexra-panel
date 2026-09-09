@@ -70,6 +70,9 @@ class Servers(Base):
     name = Column(String, unique=True, index=True, nullable=False)
     token = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Display order in the dashboard list, user-reorderable. New servers are
+    # appended after the current maximum.
+    sort_order = Column(Integer, default=0, nullable=False)
 
     # Populated by the agent's heartbeat; null until the first one arrives.
     last_seen_at = Column(DateTime, nullable=True)

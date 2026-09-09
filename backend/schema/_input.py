@@ -105,6 +105,12 @@ class ServerInput(BaseModel):
     name: str = Field(min_length=1)
 
 
+class ServerReorderInput(BaseModel):
+    """The complete list of server ids, in the order they should display."""
+
+    ordered_ids: list[int]
+
+
 class ServerHeartbeatInput(BaseModel):
     """Reported by the agent on every heartbeat. Bandwidth is deliberately
     not collected - tracking per-interface counters would add another

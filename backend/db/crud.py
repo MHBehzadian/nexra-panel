@@ -210,7 +210,7 @@ def change_panel_status(db: Session, panel_id: int) -> bool:
 
 
 def get_all_servers(db: Session):
-    return db.query(Servers).order_by(Servers.name).all()
+    return db.query(Servers).order_by(Servers.sort_order, Servers.id).all()
 
 
 def get_server_by_id(db: Session, server_id: int) -> Servers | None:
@@ -222,11 +222,26 @@ def get_server_by_token(db: Session, token: str) -> Servers | None:
 
 
 def add_server(db: Session, name: str) -> Servers:
-    server = Servers(name=name, token=token_hex(24))
+    # Appended after whatever currently sorts last, so new servers land at
+    # the bottom of the list instead of jumbling the existing order.
+    last = db.query(Servers.sort_order).order_by(Servers.sort_order.desc()).first()
+    server = Servers(name=name, token=token_hex(24), sort_order=(last[0] if last else 0) + 1)
     db.add(server)
     db.commit()
     db.refresh(server)
     return server
+
+
+def reorder_servers(db: Session, ordered_ids: list[int]) -> bool:
+    """Applies a full new ordering in one go - `ordered_ids` is the complete
+    list of server ids in the order they should display."""
+    servers = {s.id: s for s in db.query(Servers).filter(Servers.id.in_(ordered_ids))}
+    if len(servers) != len(ordered_ids):
+        return False
+    for index, server_id in enumerate(ordered_ids):
+        servers[server_id].sort_order = index
+    db.commit()
+    return True
 
 
 def rename_server(db: Session, server_id: int, name: str) -> bool:

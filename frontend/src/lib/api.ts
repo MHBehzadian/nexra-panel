@@ -477,6 +477,16 @@ export const serverAPI = {
             throw new Error(response.data.message || 'Failed to queue reboot')
         }
     },
+
+    // Full replacement order, not a single move - simplest to reason about
+    // both server-side and for the up/down buttons driving it.
+    reorderServers: async (orderedIds: number[]): Promise<void> => {
+        const response = await api.put<ResponseModel<void>>(`/superadmin/servers/reorder`, { ordered_ids: orderedIds })
+
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to reorder servers')
+        }
+    },
 }
 
 // Settings API

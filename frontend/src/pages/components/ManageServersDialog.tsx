@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Edit2, Trash2, Check, Copy, Loader2, AlertCircle, X } from 'lucide-react'
+import { Plus, Edit2, Trash2, Check, Copy, Loader2, AlertCircle, X, ChevronUp, ChevronDown } from 'lucide-react'
 import { serverAPI } from '@/lib/api'
 import { getApiClient } from '@/lib/api-client'
 import { ServerOutput, ServerCreatedOutput } from '@/types'
@@ -145,6 +145,26 @@ export function ManageServersDialog({ isOpen, onClose, onChanged }: ManageServer
         }
     }
 
+    // Optimistic swap with the neighbor, persisted as a full reorder; reverts
+    // to the server's own order if the request fails.
+    const handleMove = async (index: number, direction: -1 | 1) => {
+        const target = index + direction
+        if (target < 0 || target >= servers.length) return
+
+        const reordered = [...servers]
+        const [moved] = reordered.splice(index, 1)
+        reordered.splice(target, 0, moved)
+        setServers(reordered)
+
+        try {
+            await serverAPI.reorderServers(reordered.map((s) => s.id))
+            onChanged()
+        } catch (err: any) {
+            setError(err?.message || 'Failed to reorder servers')
+            load()
+        }
+    }
+
     return (
         <>
             <Dialog open={isOpen} onOpenChange={onClose}>
@@ -184,11 +204,31 @@ export function ManageServersDialog({ isOpen, onClose, onChanged }: ManageServer
                         ) : servers.length === 0 ? (
                             <p className="py-6 text-center text-sm text-muted-foreground">No servers added yet</p>
                         ) : (
-                            servers.map((server) => (
+                            servers.map((server, index) => (
                                 <div
                                     key={server.id}
                                     className="flex items-center gap-2 rounded-md border p-2"
                                 >
+                                    <div className="flex shrink-0 flex-col">
+                                        <Button
+                                            size="xs"
+                                            variant="ghost"
+                                            className="h-4 px-0.5"
+                                            onClick={() => handleMove(index, -1)}
+                                            disabled={index === 0}
+                                        >
+                                            <ChevronUp className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                            size="xs"
+                                            variant="ghost"
+                                            className="h-4 px-0.5"
+                                            onClick={() => handleMove(index, 1)}
+                                            disabled={index === servers.length - 1}
+                                        >
+                                            <ChevronDown className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
                                     {renamingId === server.id ? (
                                         <>
                                             <Input
