@@ -237,7 +237,7 @@ function NewsCarousel({ items }: { items: NewsFeedItem[] }): JSX.Element {
             </div>
 
             {items.length > 1 && (
-                <div className="flex items-center justify-center gap-3 px-6 pt-3">
+                <div className="flex items-center justify-center gap-3 pt-3">
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => goTo(index - 1)}>
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -943,19 +943,12 @@ export function DashboardPage() {
                 </Card>
             )}
 
-            {/* Admin News - Only for admin role */}
+            {/* Admin News - Only for admin role. No Card wrapper on purpose:
+                a banner image is meant to be the whole visual, not a picture
+                inside another frame - so there's nothing here but the
+                carousel itself. */}
             {userRole === 'admin' && dashboardData?.news && dashboardData.news.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base flex items-center gap-2">
-                            <Zap className="h-5 w-5 text-primary" />
-                            News & Updates
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0 pb-4">
-                        <NewsCarousel items={dashboardData.news} />
-                    </CardContent>
-                </Card>
+                <NewsCarousel items={dashboardData.news} />
             )}
 
 
