@@ -859,6 +859,7 @@ export function DashboardPage() {
                             <div className="divide-y">
                                 {servers.map((server) => {
                                     const ramPercent = server.ram_total ? ((server.ram_used || 0) / server.ram_total) * 100 : null
+                                    const swapPercent = server.swap_total ? ((server.swap_used || 0) / server.swap_total) * 100 : null
                                     const diskPercent = server.disk_total ? ((server.disk_used || 0) / server.disk_total) * 100 : null
                                     const hasMetrics = server.status !== 'disconnected' || server.last_seen_at
 
@@ -873,44 +874,47 @@ export function DashboardPage() {
                                             </div>
 
                                             {hasMetrics && server.cpu_percent !== null && server.cpu_percent !== undefined ? (
-                                                <>
-                                                    <div className="w-20 text-xs">
-                                                        <div className="text-muted-foreground">CPU</div>
-                                                        <div className="font-extrabold tabular">{server.cpu_percent.toFixed(0)}%</div>
-                                                    </div>
-                                                    <div className="w-32 text-xs">
-                                                        <div className="text-muted-foreground">RAM</div>
-                                                        <div className="font-extrabold tabular">
-                                                            {server.ram_used !== undefined && server.ram_used !== null
-                                                                ? `${bytesToGB(server.ram_used).toFixed(1)} / ${bytesToGB(server.ram_total || 0).toFixed(1)} GB`
-                                                                : '—'}
-                                                        </div>
-                                                        {ramPercent !== null && (
-                                                            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                                                <div
-                                                                    className={cn('h-full bg-primary', ramPercent > 90 && 'bg-destructive')}
-                                                                    style={{ width: `${Math.min(ramPercent, 100)}%` }}
-                                                                />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div className="w-32 text-xs">
-                                                        <div className="text-muted-foreground">Storage</div>
-                                                        <div className="font-extrabold tabular">
-                                                            {server.disk_used !== undefined && server.disk_used !== null
-                                                                ? `${bytesToGB(server.disk_used).toFixed(1)} / ${bytesToGB(server.disk_total || 0).toFixed(1)} GB`
-                                                                : '—'}
-                                                        </div>
-                                                        {diskPercent !== null && (
-                                                            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                                                <div
-                                                                    className={cn('h-full bg-primary', diskPercent > 90 && 'bg-destructive')}
-                                                                    style={{ width: `${Math.min(diskPercent, 100)}%` }}
-                                                                />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </>
+                                                <div className="flex flex-wrap items-center gap-5">
+                                                    <Gauge
+                                                        percent={server.cpu_percent}
+                                                        label="CPU"
+                                                        size={72}
+                                                        thickness={7}
+                                                    />
+                                                    <Gauge
+                                                        percent={ramPercent ?? 0}
+                                                        label="RAM"
+                                                        caption={
+                                                            server.ram_used !== undefined && server.ram_used !== null
+                                                                ? `${bytesToGB(server.ram_used).toFixed(1)}/${bytesToGB(server.ram_total || 0).toFixed(1)} GB`
+                                                                : undefined
+                                                        }
+                                                        size={72}
+                                                        thickness={7}
+                                                    />
+                                                    <Gauge
+                                                        percent={swapPercent ?? 0}
+                                                        label="Swap"
+                                                        caption={
+                                                            server.swap_total
+                                                                ? `${bytesToGB(server.swap_used || 0).toFixed(1)}/${bytesToGB(server.swap_total).toFixed(1)} GB`
+                                                                : 'None'
+                                                        }
+                                                        size={72}
+                                                        thickness={7}
+                                                    />
+                                                    <Gauge
+                                                        percent={diskPercent ?? 0}
+                                                        label="Storage"
+                                                        caption={
+                                                            server.disk_used !== undefined && server.disk_used !== null
+                                                                ? `${bytesToGB(server.disk_used).toFixed(1)}/${bytesToGB(server.disk_total || 0).toFixed(1)} GB`
+                                                                : undefined
+                                                        }
+                                                        size={72}
+                                                        thickness={7}
+                                                    />
+                                                </div>
                                             ) : (
                                                 <span className="text-xs text-muted-foreground">
                                                     {server.status === 'connecting' ? 'Waiting for first check-in...' : 'No data'}
