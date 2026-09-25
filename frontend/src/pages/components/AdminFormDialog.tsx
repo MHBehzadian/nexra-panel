@@ -75,6 +75,13 @@ export function AdminFormDialog({
         }
     }, [isOpen])
 
+    // Creating: start on a panel instead of an empty select, so the common case
+    // (one panel, everything enabled) needs no picking at all.
+    useEffect(() => {
+        if (!isOpen || admin || panels.length === 0 || watch('panel')) return
+        handlePanelChange(panels[0].name)
+    }, [isOpen, admin, panels])
+
     useEffect(() => {
         if (admin) {
             setValue('username', admin.username)
@@ -112,6 +119,11 @@ export function AdminFormDialog({
                     console.error('Failed to parse marzban_inbounds:', e)
                 }
             }
+
+            // Editing needs the panel's inbound list too, or the checkboxes have
+            // nothing to draw and the admin's saved selection stays invisible —
+            // which used to force re-picking the panel, wiping that selection.
+            loadMarzbanInbounds(admin.panel)
         } else {
             reset()
             setSelectedInbounds({})
@@ -131,11 +143,20 @@ export function AdminFormDialog({
         }
     }
 
-    const loadMarzbanInbounds = async (panelName: string) => {
+    const loadMarzbanInbounds = async (panelName: string, selectAll = false) => {
         try {
             setLoadingInbounds(true)
             const inbounds = await adminAPI.getPanelInbounds(panelName)
             setMarzbanInbounds(inbounds)
+            // A new admin gets every inbound ticked: that's what's wanted nearly
+            // every time, and unticking a few is quicker than ticking them all.
+            if (selectAll) {
+                setSelectedInbounds(
+                    Object.fromEntries(
+                        Object.entries(inbounds).filter(([, tags]) => tags.length > 0)
+                    )
+                )
+            }
         } catch (err) {
             console.error('Failed to load inbounds:', err)
             setMarzbanInbounds(null)
@@ -161,8 +182,9 @@ export function AdminFormDialog({
             // Set flow to null (empty)
             setValue('flow', null)
         } else if (panelType === 'marzban') {
-            // Load inbounds for marzban
-            loadMarzbanInbounds(panelName)
+            // Everything ticked for a new admin; an existing one keeps whatever
+            // it already had rather than being silently widened.
+            loadMarzbanInbounds(panelName, !admin)
             // Reset inbound_id and flow for marzban
             setValue('inbound_id', '')
             setValue('flow', null)

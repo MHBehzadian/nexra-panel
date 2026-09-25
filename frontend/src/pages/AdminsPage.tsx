@@ -6,12 +6,14 @@ import {
     Trash2,
     ToggleLeft,
     ToggleRight,
+    Search,
 } from 'lucide-react'
 import { adminAPI, dashboardAPI } from '@/lib/api'
 import { bytesToGB } from '@/lib/traffic-converter'
 import { formatDate, cn, calculateRemainingDays } from '@/lib/utils'
 import { AdminOutput } from '@/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -45,6 +47,7 @@ export function AdminsPage() {
     const [selectedAdmin, setSelectedAdmin] = useState<AdminOutput | null>(null)
     const [showAdminDialog, setShowAdminDialog] = useState(false)
     const [adminToDelete, setAdminToDelete] = useState<number | null>(null)
+    const [searchQuery, setSearchQuery] = useState('')
 
     useEffect(() => {
         fetchAdmins()
@@ -95,6 +98,14 @@ export function AdminsPage() {
         )
     }
 
+    const query = searchQuery.trim().toLowerCase()
+    const filteredAdmins = query
+        ? admins.filter((admin) =>
+              [admin.username, admin.panel, admin.telegram_id?.toString()]
+                  .some((field) => field?.toLowerCase().includes(query))
+          )
+        : admins
+
     return (
         <div className="space-y-6 p-4 md:p-6 max-w-full overflow-x-hidden">
             {/* Page Title */}
@@ -112,35 +123,53 @@ export function AdminsPage() {
 
             {/* Admins Table */}
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                        <CardTitle>Admins</CardTitle>
-                        <CardDescription>
-                            {admins.length} admin{admins.length !== 1 ? 's' : ''} total
-                        </CardDescription>
+                <CardHeader className="flex flex-col gap-4">
+                    <div className="flex flex-row items-center justify-between">
+                        <div>
+                            <CardTitle>Admins</CardTitle>
+                            <CardDescription>
+                                {searchQuery
+                                    ? `${filteredAdmins.length} of ${admins.length} admin${admins.length !== 1 ? 's' : ''}`
+                                    : `${admins.length} admin${admins.length !== 1 ? 's' : ''} total`}
+                            </CardDescription>
+                        </div>
+                        <Button
+                            size="sm"
+                            onClick={() => {
+                                setSelectedAdmin(null)
+                                setShowAdminDialog(true)
+                            }}
+                        >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Admin
+                        </Button>
                     </div>
-                    <Button
-                        size="sm"
-                        onClick={() => {
-                            setSelectedAdmin(null)
-                            setShowAdminDialog(true)
-                        }}
-                    >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Admin
-                    </Button>
+
+                    {/* One box across every panel: username, panel or Telegram ID */}
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            type="text"
+                            placeholder="Search admins by username, panel or Telegram ID..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
                 </CardHeader>
 
                 <CardContent>
-                    {admins.length === 0 ? (
+                    {filteredAdmins.length === 0 ? (
                         <div className="text-center py-8">
-                            <p className="text-muted-foreground">No admins yet</p>
+                            <p className="text-muted-foreground">
+                                {searchQuery ? 'No admins match your search' : 'No admins yet'}
+                            </p>
                         </div>
                     ) : (
                         <>
                             {/* Mobile View - Cards */}
                             <div className="md:hidden space-y-3">
-                                {admins.map((admin) => (
+                                {filteredAdmins.map((admin) => (
                                     <MobileAdminCard
                                         key={admin.id}
                                         admin={admin}
@@ -176,7 +205,7 @@ export function AdminsPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {admins.map((admin) => (
+                                        {filteredAdmins.map((admin) => (
                                             <AdminDetailsRow
                                                 key={admin.id}
                                                 admin={admin}
