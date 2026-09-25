@@ -367,7 +367,7 @@ async def change_admin_marzban_password(
     # as that admin — the authoritative check, rather than trusting Nexra's copy.
     verify_api = MarzbanAPI(url=panel.url, username=admin.username, password=payload.current_password)
     try:
-        current_ok = await verify_api.test_connection()
+        current_ok = await verify_api.verify_credentials()
     except Exception as e:
         logger.error(f"Marzban unreachable while verifying password for {admin.username}: {e}")
         return JSONResponse(

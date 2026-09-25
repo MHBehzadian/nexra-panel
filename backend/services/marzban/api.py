@@ -67,21 +67,33 @@ class APIService:
         self.headers = {"Authorization": f"Bearer {self.token}"}
 
     async def test_connection(self) -> bool:
+        """Whether these credentials work, with any failure reported as False.
+
+        Only for places that genuinely can't act on the difference; anything that
+        tells a person their password was wrong must use verify_credentials().
+        """
         try:
-            token = (
-                requests.post(
-                    f"{self.url}api/admin/token",
-                    data={
-                        "username": self.username,
-                        "password": self.password,
-                    },
-                )
-                .json()
-                .get("access_token")
-            )
-            return True if token else False
+            return await self.verify_credentials()
         except Exception:
             return False
+
+    async def verify_credentials(self) -> bool:
+        """Whether Marzban accepts these credentials.
+
+        Returns False only when Marzban actually rejects them, and raises when it
+        couldn't be asked. test_connection() swallows both into False, which made
+        an unreachable Marzban indistinguishable from a wrong password — and told
+        the customer their own password was wrong.
+        """
+        response = requests.post(
+            f"{self.url}api/admin/token",
+            data={"username": self.username, "password": self.password},
+            timeout=self._request_timeout,
+        )
+        if response.status_code in (401, 403, 422):
+            return False
+        response.raise_for_status()
+        return bool(response.json().get("access_token"))
 
     async def get_users(self):
         await self._login()
@@ -174,6 +186,33 @@ class APIService:
         )
         return response.status_code
 
+    async def get_admin(self, username: str) -> dict | None:
+        """One admin's record as Marzban has it.
+
+        Asks Marzban to filter first, then falls back to the whole list: the
+        filter matches loosely on some versions and is missing on older ones, so
+        the exact username is re-checked either way.
+        """
+        await self._login()
+        for params in ({"username": username}, None):
+            try:
+                response = self.session.get(
+                    f"{self.url}api/admins",
+                    headers=self.headers,
+                    params=params,
+                    timeout=self._request_timeout,
+                )
+            except Exception:
+                return None
+            if response.status_code != 200:
+                continue
+            match = next(
+                (a for a in response.json() if a.get("username") == username), None
+            )
+            if match:
+                return match
+        return None
+
     async def update_admin_password(self, admin_username: str, new_password: str) -> int:
         """Change another Marzban admin's password. Requires this APIService to be
         logged in as a sudo admin (self.username/self.password) — Marzban rejects
@@ -186,9 +225,7 @@ class APIService:
         """
         await self._login()
 
-        current = next(
-            (a for a in await self.get_admins() if a.get("username") == admin_username), None
-        )
+        current = await self.get_admin(admin_username)
         if current is None:
             return 404
 
@@ -201,7 +238,12 @@ class APIService:
             f"{self.url}api/admin/{admin_username}",
             headers=self.headers,
             json=payload,
+            timeout=self._request_timeout,
         )
+        # The old password's token is now worthless; keeping it cached would have
+        # this admin's next call authenticate as someone who can no longer log in.
+        if response.status_code == 200:
+            APIService._token_cache.pop((self.url, admin_username), None)
         return response.status_code
 
     async def get_system_stats(self) -> dict:
