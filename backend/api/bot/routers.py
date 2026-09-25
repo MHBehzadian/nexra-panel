@@ -247,7 +247,32 @@ async def create_admin(
 
     sudo_api = MarzbanAPI(url=panel.url, username=panel.username, password=panel.password)
 
-    # Create in Marzban first. If Nexra's row were written first and Marzban then
+    # Read the inbounds before creating anything. An admin stored without them
+    # can log in and make users, but those users carry no proxies at all — a
+    # panel that exists and does nothing, which is worse than a clean failure.
+    try:
+        inbounds = await sudo_api.get_inbounds()
+    except Exception as e:
+        logger.error(f"Could not read inbounds from panel {panel.name}: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={"success": False, "message": f"Could not read the panel's inbounds: {e}"},
+        )
+
+    if not inbounds:
+        logger.error(f"Panel {panel.name} reported no inbounds; refusing to create an admin")
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={
+                "success": False,
+                "message": (
+                    "Marzban returned no inbounds for this panel, so the new admin's users "
+                    "would have no configuration. Check the panel's inbounds and try again."
+                ),
+            },
+        )
+
+    # Create in Marzban next. If Nexra's row were written first and Marzban then
     # refused, the panel would list an admin that cannot actually serve anyone.
     try:
         marzban_status, detail = await sudo_api.create_admin(
@@ -269,13 +294,8 @@ async def create_admin(
             },
         )
 
-    # Give the new admin every inbound the panel offers; the superadmin can
-    # narrow it afterwards in the panel UI.
-    try:
-        inbounds = await sudo_api.get_inbounds()
-    except Exception:
-        inbounds = {}
-
+    # Every inbound the panel offers; the superadmin can narrow it afterwards
+    # in the panel UI.
     expiry_date = None
     if payload.expiry_days:
         expiry_date = datetime.utcnow() + timedelta(days=payload.expiry_days)
@@ -287,7 +307,7 @@ async def create_admin(
         panel=payload.panel,
         inbound_id=None,
         flow=None,
-        marzban_inbounds=json.dumps(inbounds) if inbounds else None,
+        marzban_inbounds=json.dumps(inbounds),
         marzban_password=payload.password,
         traffic=int(payload.traffic_gb * 1024**3),
         update_return_traffic=False,

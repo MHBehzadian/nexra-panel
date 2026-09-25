@@ -113,7 +113,7 @@ class APIService:
         await self._login()
         url = f"{self.url}api/inbounds"
 
-        response = self.session.get(url, headers=self.headers)
+        response = self.session.get(url, headers=self.headers, timeout=self._request_timeout)
 
         # Transform to list of tags for each protocol
         inbounds = response.json()
