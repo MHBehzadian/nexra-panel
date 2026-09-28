@@ -91,7 +91,11 @@ function Layout({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
     return (
-        <div className="flex min-h-screen bg-background max-w-full overflow-x-hidden">
+        // The shell owns the viewport and never scrolls; <main> is the only
+        // thing that does. Sticky wouldn't work here anyway — overflow-x-hidden
+        // makes the browser compute overflow-y:auto, which turns this into a
+        // scroll container and kills sticky positioning inside it.
+        <div className="flex h-screen [height:100dvh] bg-background max-w-full overflow-hidden">
             {/* Mobile Sidebar Overlay */}
             {sidebarOpen && (
                 <div
@@ -120,17 +124,17 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </div>
             </aside>
 
-            {/* Desktop Sidebar - Hidden on mobile. Pinned to the viewport: as a
-                plain column it grew to the height of the page, which pushed
-                Finance/Support/Logout below the fold on any long page. */}
-            <aside className="nx-header hidden md:flex w-64 border-r flex-col flex-shrink-0 sticky top-0 h-screen">
+            {/* Desktop Sidebar - Hidden on mobile. Full viewport height and
+                outside the scrolling area, so Finance/Support/Logout stay at
+                the bottom of the screen instead of the bottom of a long page. */}
+            <aside className="nx-header hidden md:flex w-64 border-r flex-col flex-shrink-0 h-full">
                 <div className="flex-1 overflow-y-auto">
                     <Sidebar />
                 </div>
             </aside>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+            <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-x-hidden">
                 {/* Mobile Header with Menu Button */}
                 <header className="nx-header md:hidden flex items-center gap-3 p-4 border-b sticky top-0 z-30">
                     <Button
