@@ -20,6 +20,8 @@
         // wrong theme on every load.
         (function () {
             try {
+                // The login page is light only, so it never takes the class.
+                if (/\/login\/?$/.test(location.pathname)) return;
                 var saved = localStorage.getItem('theme');
                 var dark = saved
                     ? saved === 'dark'
