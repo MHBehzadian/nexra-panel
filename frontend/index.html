@@ -13,6 +13,21 @@
     <meta name="apple-mobile-web-app-title" content="nexra panel" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nexra Panel</title>
+    <script>
+        // Applied here rather than in React: useTheme only mounts inside the
+        // sidebar, so the login page rendered light for everyone regardless of
+        // their saved choice. Running before paint also kills the flash of the
+        // wrong theme on every load.
+        (function () {
+            try {
+                var saved = localStorage.getItem('theme');
+                var dark = saved
+                    ? saved === 'dark'
+                    : window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (dark) document.documentElement.classList.add('dark');
+            } catch (e) { }
+        })();
+    </script>
 </head>
 
 <body>

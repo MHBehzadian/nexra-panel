@@ -60,10 +60,12 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
         setValue,
     } = useForm<UserFormData>({
         resolver: zodResolver(userSchema),
+        // What almost every new user gets, so the common case is one field
+        // (the username) rather than three.
         defaultValues: {
             email: '',
-            totalGb: 0.1,
-            expiryDatetime: null,
+            totalGb: 30,
+            expiryDatetime: 30,
         },
     })
 

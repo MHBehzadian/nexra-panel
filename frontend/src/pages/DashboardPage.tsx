@@ -27,12 +27,20 @@ import { formatDate, formatExpiryWithDays, cn } from '@/lib/utils'
 import { getUserRole } from '@/lib/auth'
 import { DashboardData, ClientsOutput, MarzbanOverview, MarzbanPeriod, MARZBAN_PERIODS, NewsFeedItem, ServerOutput } from '@/types'
 import { Donut, Gauge, SEGMENT_COLORS } from '@/components/charts/Donut'
+import { SegmentedBar } from '@/components/charts/SegmentedBar'
 import { useBannerImage } from '@/hooks/useBannerImage'
 import { ManageServersDialog } from './components/ManageServersDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
 import {
     Table,
     TableBody,
@@ -865,7 +873,7 @@ export function DashboardPage() {
                                 No servers added yet. Use the pencil icon above to add one.
                             </p>
                         ) : (
-                            <div className="divide-y">
+                            <div className="grid gap-4 xl:grid-cols-2">
                                 {servers.map((server) => {
                                     const ramPercent = server.ram_total ? ((server.ram_used || 0) / server.ram_total) * 100 : null
                                     const swapPercent = server.swap_total ? ((server.swap_used || 0) / server.swap_total) * 100 : null
@@ -875,70 +883,68 @@ export function DashboardPage() {
                                     return (
                                         <div
                                             key={server.id}
-                                            className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3"
+                                            className="rounded-lg border p-3"
                                         >
-                                            <div className="flex w-full shrink-0 items-center gap-2 sm:w-36">
+                                            <div className="flex items-center gap-2">
                                                 <ServerStatusDot status={server.status} />
-                                                <span className="truncate text-sm font-bold">{server.name}</span>
+                                                <span className="min-w-0 flex-1 truncate text-sm font-bold">
+                                                    {server.name}
+                                                </span>
+                                                {server.cpu_cores ? (
+                                                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                                                        {server.cpu_cores} cores
+                                                    </span>
+                                                ) : null}
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => setServerToReboot(server.id)}
+                                                >
+                                                    <RotateCcw className="h-4 w-4 mr-2" />
+                                                    Reboot
+                                                </Button>
                                             </div>
 
                                             {hasMetrics && server.cpu_percent !== null && server.cpu_percent !== undefined ? (
-                                                <div className="flex flex-wrap items-center gap-5">
-                                                    <Gauge
+                                                <div className="mt-3 grid gap-x-5 gap-y-3 sm:grid-cols-2">
+                                                    <SegmentedBar
                                                         percent={server.cpu_percent}
-                                                        label="CPU"
-                                                        size={72}
-                                                        thickness={7}
+                                                        label="Processor"
+                                                        caption={server.cpu_cores ? `${server.cpu_cores} cores` : undefined}
                                                     />
-                                                    <Gauge
+                                                    <SegmentedBar
                                                         percent={ramPercent ?? 0}
-                                                        label="RAM"
+                                                        label="Memory"
                                                         caption={
                                                             server.ram_used !== undefined && server.ram_used !== null
-                                                                ? `${bytesToGB(server.ram_used).toFixed(1)}/${bytesToGB(server.ram_total || 0).toFixed(1)} GB`
+                                                                ? `${bytesToGB(server.ram_used).toFixed(1)} / ${bytesToGB(server.ram_total || 0).toFixed(1)} GB`
                                                                 : undefined
                                                         }
-                                                        size={72}
-                                                        thickness={7}
                                                     />
-                                                    <Gauge
+                                                    <SegmentedBar
+                                                        percent={diskPercent ?? 0}
+                                                        label="Disk"
+                                                        caption={
+                                                            server.disk_used !== undefined && server.disk_used !== null
+                                                                ? `${bytesToGB(server.disk_used).toFixed(1)} / ${bytesToGB(server.disk_total || 0).toFixed(1)} GB`
+                                                                : undefined
+                                                        }
+                                                    />
+                                                    <SegmentedBar
                                                         percent={swapPercent ?? 0}
                                                         label="Swap"
                                                         caption={
                                                             server.swap_total
-                                                                ? `${bytesToGB(server.swap_used || 0).toFixed(1)}/${bytesToGB(server.swap_total).toFixed(1)} GB`
-                                                                : 'None'
+                                                                ? `${bytesToGB(server.swap_used || 0).toFixed(1)} / ${bytesToGB(server.swap_total).toFixed(1)} GB`
+                                                                : 'not configured'
                                                         }
-                                                        size={72}
-                                                        thickness={7}
-                                                    />
-                                                    <Gauge
-                                                        percent={diskPercent ?? 0}
-                                                        label="Storage"
-                                                        caption={
-                                                            server.disk_used !== undefined && server.disk_used !== null
-                                                                ? `${bytesToGB(server.disk_used).toFixed(1)}/${bytesToGB(server.disk_total || 0).toFixed(1)} GB`
-                                                                : undefined
-                                                        }
-                                                        size={72}
-                                                        thickness={7}
                                                     />
                                                 </div>
                                             ) : (
-                                                <span className="text-xs text-muted-foreground">
+                                                <p className="mt-3 text-xs text-muted-foreground">
                                                     {server.status === 'connecting' ? 'Waiting for first check-in...' : 'No data'}
-                                                </span>
+                                                </p>
                                             )}
-
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="ml-auto"
-                                                onClick={() => setServerToReboot(server.id)}
-                                            >
-                                                <RotateCcw className="h-4 w-4 mr-2" />
-                                                Reboot
-                                            </Button>
                                         </div>
                                     )
                                 })}
@@ -1001,17 +1007,22 @@ export function DashboardPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Total Users */}
+                    {/* Active users out of the total, the way Marzban reports it:
+                        the bare total counted disabled users too, which read as
+                        more live users than there really were. */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                            <CardTitle className="text-sm font-medium">Active Users</CardTitle>
                             <Users className="h-4 w-4 text-green-500" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {dashboardData.users?.length || 0}
+                                {(dashboardData.users?.filter(u => u.status).length || 0).toLocaleString()}
+                                <span className="text-base font-semibold text-muted-foreground">
+                                    {' / '}{(dashboardData.users?.length || 0).toLocaleString()}
+                                </span>
                             </div>
-                            <p className="text-xs text-muted-foreground">Registered users</p>
+                            <p className="text-xs text-muted-foreground">Active / total users</p>
                         </CardContent>
                     </Card>
 
@@ -1053,19 +1064,23 @@ export function DashboardPage() {
 
                         {/* Search Bar and Filter */}
                         <div className="flex flex-col sm:flex-row gap-3">
-                            <select
+                            <Select
                                 value={statusFilter}
-                                onChange={(e) => {
-                                    setStatusFilter(e.target.value as 'all' | 'active' | 'inactive' | 'online')
+                                onValueChange={(value) => {
+                                    setStatusFilter(value as 'all' | 'active' | 'inactive' | 'online')
                                     setCurrentPage(1)
                                 }}
-                                className="h-10 w-auto rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                             >
-                                <option value="all">All</option>
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                                <option value="online">Online</option>
-                            </select>
+                                <SelectTrigger className="w-full sm:w-40">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All</SelectItem>
+                                    <SelectItem value="active">Active</SelectItem>
+                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                    <SelectItem value="online">Online</SelectItem>
+                                </SelectContent>
+                            </Select>
                             <div className="relative flex-1">
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input

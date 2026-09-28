@@ -11,9 +11,15 @@ import { HelpPage } from '@/pages/HelpPage'
 import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
+// BASE_URL carries a trailing slash ("/dashboard/"), and React Router only
+// strips a basename when the URL starts with it in full — so a bare
+// "/dashboard" matched nothing and rendered a blank page, while "/dashboard/"
+// and "/dashboard/login" both worked. Without the slash both forms match.
+const ROUTER_BASENAME = import.meta.env.BASE_URL.replace(/\/+$/, '') || '/'
+
 function App() {
     return (
-        <Router basename={import.meta.env.BASE_URL}>
+        <Router basename={ROUTER_BASENAME}>
             <Routes>
                 {/* Public Routes */}
                 <Route path="/login" element={<LoginPage />} />
@@ -114,8 +120,10 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </div>
             </aside>
 
-            {/* Desktop Sidebar - Hidden on mobile */}
-            <aside className="nx-header hidden md:flex w-64 border-r flex-col flex-shrink-0">
+            {/* Desktop Sidebar - Hidden on mobile. Pinned to the viewport: as a
+                plain column it grew to the height of the page, which pushed
+                Finance/Support/Logout below the fold on any long page. */}
+            <aside className="nx-header hidden md:flex w-64 border-r flex-col flex-shrink-0 sticky top-0 h-screen">
                 <div className="flex-1 overflow-y-auto">
                     <Sidebar />
                 </div>
