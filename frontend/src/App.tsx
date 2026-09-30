@@ -91,11 +91,11 @@ function Layout({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
     return (
-        // The shell owns the viewport and never scrolls; <main> is the only
-        // thing that does. Sticky wouldn't work here anyway — overflow-x-hidden
-        // makes the browser compute overflow-y:auto, which turns this into a
-        // scroll container and kills sticky positioning inside it.
-        <div className="flex h-screen [height:100dvh] bg-background max-w-full overflow-hidden">
+        // The page scrolls, as it always did — one scrollbar, at the window
+        // edge. (Making the content its own scroll area pins the sidebar just
+        // as well, but puts a second scrollbar inside the layout and narrows
+        // every card by its width.)
+        <div className="flex min-h-screen bg-background max-w-full overflow-x-hidden">
             {/* Mobile Sidebar Overlay */}
             {sidebarOpen && (
                 <div
@@ -124,10 +124,14 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </div>
             </aside>
 
-            {/* Desktop Sidebar - Hidden on mobile. Full viewport height and
-                outside the scrolling area, so Finance/Support/Logout stay at
-                the bottom of the screen instead of the bottom of a long page. */}
-            <aside className="nx-header hidden md:flex w-64 border-r flex-col flex-shrink-0 h-full">
+            {/* Desktop Sidebar - Hidden on mobile. Fixed to the viewport so
+                Finance/Support/Logout stay at the bottom of the screen rather
+                than the bottom of a long page. Sticky can't do this here: the
+                overflow-x-hidden above makes the browser compute overflow-y as
+                auto, which disables sticky inside it. Fixed is unaffected, but
+                it leaves the flow, so the content column makes room with a
+                matching margin. */}
+            <aside className="nx-header hidden md:flex fixed inset-y-0 left-0 w-64 border-r flex-col z-30">
                 <div className="flex-1 overflow-y-auto">
                     <Sidebar />
                 </div>
@@ -141,15 +145,15 @@ function Layout({ children }: { children: React.ReactNode }) {
                 size="icon"
                 aria-label="Open menu"
                 onClick={() => setSidebarOpen(true)}
-                className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-30 h-12 w-11 rounded-l-none rounded-r-xl shadow-lg"
+                className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-30 h-12 w-9 rounded-l-none rounded-r-xl shadow-lg"
             >
-                <Menu className="h-5 w-5" />
+                <Menu className="h-4 w-4" />
             </Button>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-x-hidden">
+            <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden md:ml-64">
 
-                <main className="flex-1 overflow-y-auto overflow-x-hidden">
+                <main className="flex-1 overflow-x-hidden">
                     {children}
                 </main>
             </div>
