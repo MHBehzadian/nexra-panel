@@ -133,19 +133,21 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </div>
             </aside>
 
+            {/* Mobile menu: a tab on the left edge, level with the middle of
+                the screen, rather than a bar across the top — that bar cost a
+                strip of every screen on a phone for a button and a title.
+                Flat against the edge it sits on, rounded on the open side. */}
+            <Button
+                size="icon"
+                aria-label="Open menu"
+                onClick={() => setSidebarOpen(true)}
+                className="md:hidden fixed left-0 top-1/2 -translate-y-1/2 z-30 h-12 w-11 rounded-l-none rounded-r-xl shadow-lg"
+            >
+                <Menu className="h-5 w-5" />
+            </Button>
+
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-x-hidden">
-                {/* Mobile Header with Menu Button */}
-                <header className="nx-header md:hidden flex items-center gap-3 p-4 border-b sticky top-0 z-30">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setSidebarOpen(true)}
-                    >
-                        <Menu className="h-5 w-5" />
-                    </Button>
-                    <span className="font-black tracking-tight">Nexra Panel</span>
-                </header>
 
                 <main className="flex-1 overflow-y-auto overflow-x-hidden">
                     {children}
