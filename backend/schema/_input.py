@@ -133,3 +133,4 @@ class SettingsInput(BaseModel):
     telegram_chat_id: Optional[str] = None
     backup_enabled: Optional[bool] = None
     backup_interval_hours: Optional[int] = None
+    agent_base_url: Optional[str] = None

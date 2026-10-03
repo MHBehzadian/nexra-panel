@@ -93,6 +93,9 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now nexra-agent
+systemctl enable nexra-agent
+# restart, not "enable --now": re-running the installer with a new URL or token
+# rewrites the unit, but --now leaves an already-running agent on the old one.
+systemctl restart nexra-agent
 
 echo "Nexra agent installed and running (systemctl status nexra-agent)."

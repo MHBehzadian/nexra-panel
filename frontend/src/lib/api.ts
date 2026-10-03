@@ -496,6 +496,7 @@ export interface PanelSettings {
     telegram_chat_id: string
     backup_enabled: boolean
     backup_interval_hours: number
+    agent_base_url: string
     has_logo: boolean
 }
 

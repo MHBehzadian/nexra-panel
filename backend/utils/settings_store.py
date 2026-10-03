@@ -20,6 +20,10 @@ DEFAULTS = {
     "telegram_chat_id": "",
     "backup_enabled": False,
     "backup_interval_hours": 6,
+    # Where monitoring agents send their heartbeats. Empty means "whatever
+    # domain the panel is open on", which is wrong when one of the panel's
+    # domains is routable from the monitored servers and another isn't.
+    "agent_base_url": "",
 }
 
 
