@@ -1,6 +1,6 @@
 from datetime import datetime
 from .engin import Base
-from sqlalchemy import Column, DateTime, Integer, String, Boolean, BigInteger, Float
+from sqlalchemy import Column, DateTime, Integer, String, Boolean, BigInteger, Float, ForeignKey
 
 
 class Admins(Base):
@@ -88,3 +88,26 @@ class Servers(Base):
     # Set by the reboot endpoint, cleared once the agent acts on it and
     # confirms in its next heartbeat after restart.
     reboot_requested = Column(Boolean, default=False)
+
+class TelegramBots(Base):
+    """A Nexra sales bot (nexrabot, the Go MirzaBot) this panel manages.
+
+    The panel talks to the bot's management API (/api/v1) with one of two keys:
+    owner_key is only ever used for the superadmin, manager_key for the admin
+    the bot is assigned to. The bot itself refuses panel (server) changes for
+    the manager key, so an admin can run the shop but never touch servers.
+    """
+
+    __tablename__ = "telegram_bots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    # Base address of the bot, e.g. https://bot7.example.com (no /api/v1)
+    url = Column(String, nullable=False)
+    owner_key = Column(String, nullable=False)
+    manager_key = Column(String, nullable=False)
+    # The admin who runs this bot; null means only the superadmin sees it.
+    admin_id = Column(Integer, ForeignKey("admins.id", ondelete="SET NULL"), nullable=True, index=True)
+    bot_username = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

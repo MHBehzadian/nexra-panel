@@ -10,6 +10,7 @@ import {
     Sun,
     Moon,
     Server,
+    Bot,
 } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { logout, getUserRole } from '@/lib/auth'
@@ -41,6 +42,12 @@ const navigationItems = [
         href: '/panels',
         icon: Server,
         roles: ['superadmin'],
+    },
+    {
+        label: 'Bot',
+        href: '/bots',
+        icon: Bot,
+        roles: ['admin', 'superadmin'],
     },
     {
         label: 'Settings',

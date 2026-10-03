@@ -7,3 +7,5 @@ __pycache__/
 *.db
 *.jpg
 *.jpeg
+*.apk
+data/nexra-autopay.json

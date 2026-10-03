@@ -8,6 +8,7 @@ import { AdminsPage } from '@/pages/AdminsPage'
 import { PanelsPage } from '@/pages/PanelsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { HelpPage } from '@/pages/HelpPage'
+import { BotsPage } from '@/pages/BotsPage'
 import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -64,6 +65,17 @@ function App() {
                         <ProtectedRoute>
                             <Layout>
                                 <SettingsPage />
+                            </Layout>
+                        </ProtectedRoute>
+                    }
+                />
+
+                <Route
+                    path="/bots"
+                    element={
+                        <ProtectedRoute>
+                            <Layout>
+                                <BotsPage />
                             </Layout>
                         </ProtectedRoute>
                     }
