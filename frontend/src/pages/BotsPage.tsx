@@ -17,7 +17,7 @@ import {
 import { botAPI, botsAPI, BotInfo, TelegramBot } from '@/lib/bots-api'
 import { getUserRole } from '@/lib/auth'
 import { cn } from '@/lib/utils'
-import { ErrorBox, Loading, errorText } from './bots/common'
+import { BotName, ErrorBox, Loading, errorText, sameAsUsername } from './bots/common'
 import { ManageBots } from './bots/ManageBots'
 import { OverviewTab } from './bots/OverviewTab'
 import { ProductsTab } from './bots/ProductsTab'
@@ -149,8 +149,7 @@ export function BotsPage() {
                                         b.id === botId ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:bg-accent'
                                     )}
                                 >
-                                    {b.name}
-                                    {b.bot_username && <span className="opacity-70 mr-1" dir="ltr">@{b.bot_username}</span>}
+                                    <BotName name={b.name} username={b.bot_username} usernameClass="opacity-70 mr-1" />
                                 </button>
                             ))}
                         </div>
@@ -158,7 +157,11 @@ export function BotsPage() {
 
                     {current && (
                         <div className="flex flex-wrap items-center gap-2 text-sm">
-                            <span className="font-semibold">{current.name}</span>
+                            {!sameAsUsername(current.name, current.bot_username) && (
+                                <bdi dir="ltr" className="font-semibold">
+                                    {current.name}
+                                </bdi>
+                            )}
                             {current.bot_username && (
                                 <a className="text-primary hover:underline" dir="ltr" href={`https://t.me/${current.bot_username}`} target="_blank" rel="noopener noreferrer">
                                     @{current.bot_username}

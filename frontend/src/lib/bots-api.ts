@@ -85,8 +85,12 @@ export const botsAPI = {
     apkFetch: async (): Promise<ApkInfo> => unwrap(await api.post<ResponseModel<ApkInfo>>('/sales-bots/autopay-app/fetch')),
 
     packs: async (): Promise<EmojiPacks> => unwrap(await api.get<ResponseModel<EmojiPacks>>('/sales-bots/emoji-packs')),
-    addPack: async (link: string): Promise<{ packs: EmojiPack[]; pushed: PushResult[] }> =>
-        unwrap(await api.post<ResponseModel<{ packs: EmojiPack[]; pushed: PushResult[] }>>('/sales-bots/emoji-packs', { link })),
+    addPack: async (link: string): Promise<{ packs: EmojiPack[]; pushed: PushResult[]; added: string[]; already: string[] }> =>
+        unwrap(
+            await api.post<ResponseModel<{ packs: EmojiPack[]; pushed: PushResult[]; added: string[]; already: string[] }>>('/sales-bots/emoji-packs', {
+                link,
+            })
+        ),
     removePack: async (name: string): Promise<{ packs: EmojiPack[]; pushed: PushResult[] }> =>
         unwrap(await api.delete<ResponseModel<{ packs: EmojiPack[]; pushed: PushResult[] }>>(`/sales-bots/emoji-packs/${encodeURIComponent(name)}`)),
     syncPacks: async (): Promise<{ pushed: PushResult[] }> =>

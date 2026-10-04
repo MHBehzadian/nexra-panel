@@ -416,28 +416,57 @@ async def list_packs(user: dict = Depends(get_current_admin)):
     return ResponseModel(success=True, message="ok", data={"configured": packs is not None, "packs": packs or []})
 
 
-@router.post("/emoji-packs", description="Allow a premium emoji pack (superadmin)")
+EMOJI_ID = re.compile(r"(?<![0-9])[0-9]{15,25}(?![0-9])")
+PACK_LINK = re.compile(r"(?:t\.me|telegram\.me)/(?:addemoji|addstickers)/([A-Za-z0-9_]{1,64})")
+
+
+@router.post("/emoji-packs", description="Allow premium emoji packs (superadmin): a pack link or name, emoji ids, or the bot's emoji-id message")
 async def add_pack(body: dict, db: Session = Depends(get_db), user: dict = Depends(get_current_admin)):
     if not _is_superadmin(user):
         return _fail(status.HTTP_403_FORBIDDEN, "Access denied. Only superadmin can access this endpoint")
-    name = _pack_name(str(body.get("link", "")))
-    if not PACK_NAME.match(name):
-        return _fail(400, "Give the pack link (t.me/addemoji/NAME) or its name")
-    packs = _load_packs() or []
-    if any(p["name"].lower() == name.lower() for p in packs):
-        return _fail(409, "This pack is already added")
+    text = str(body.get("link", "")).strip()
+    names = PACK_LINK.findall(text)
+    ids = list(dict.fromkeys(EMOJI_ID.findall(PACK_LINK.sub(" ", text))))
+    if not names and not ids:
+        name = _pack_name(text)
+        if not PACK_NAME.match(name):
+            return _fail(400, "لینک پک (t.me/addemoji/…)، نام پک یا شناسه‌ی ایموجی‌ها را بگذارید")
+        names = [name]
     bots = [b for b in crud.get_all_bots(db) if b.is_active] or crud.get_all_bots(db)
     if not bots:
         return _fail(400, "Connect a bot first; packs are read through a bot")
-    code, res = await _bot_call(bots[0], "GET", f"emoji-pack/{name}")
-    if code != 200 or not res.get("ok"):
-        return _fail(code if code >= 400 else 502, res.get("error") or "Could not read the pack")
-    data = res["data"]
-    packs.append({"name": data["name"], "title": data.get("title") or data["name"],
-                  "emojis": [{"id": e["id"], "emoji": e.get("emoji", "")} for e in data.get("emojis", [])]})
+    via = bots[0]
+    if ids:
+        code, res = await _bot_call(via, "GET", "emoji-sets?ids=" + ",".join(ids[:200]))
+        if code == 404 or (code == 502 and "JSONDecodeError" in str(res.get("error"))):
+            return _fail(400, "نسخه‌ی ربات قدیمی است و شناسه را نمی‌شناسد (روی سرور: bash install.sh update)؛ فعلاً لینک پک را بگذارید")
+        if code != 200 or not res.get("ok"):
+            return _fail(code if code >= 400 else 502, res.get("error") or "ایموجی‌ها پیدا نشدند")
+        found = list(dict.fromkeys((res["data"].get("sets") or {}).values()))
+        if not found and not names:
+            return _fail(404, "تلگرام این شناسه‌ها را نمی‌شناسد")
+        names += [n for n in found if n not in names]
+    packs = _load_packs() or []
+    have = {p["name"].lower() for p in packs}
+    added, already = [], []
+    for name in dict.fromkeys(names):
+        if name.lower() in have:
+            already.append(name)
+            continue
+        code, res = await _bot_call(via, "GET", f"emoji-pack/{name}")
+        if code != 200 or not res.get("ok"):
+            return _fail(code if code >= 400 else 502, f"{name}: " + (res.get("error") or "پک خوانده نشد"))
+        data = res["data"]
+        packs.append({"name": data["name"], "title": data.get("title") or data["name"],
+                      "emojis": [{"id": e["id"], "emoji": e.get("emoji", "")} for e in data.get("emojis", [])]})
+        have.add(data["name"].lower())
+        added.append(data.get("title") or data["name"])
+    if not added:
+        return _fail(409, "این پک قبلاً اضافه شده: " + ", ".join(already))
     _save_packs(packs)
     pushed = await _push_emoji_allow(db)
-    return ResponseModel(success=True, message="Pack added", data={"packs": packs, "pushed": pushed})
+    return ResponseModel(success=True, message="Pack added", data={"packs": packs, "pushed": pushed,
+                                                                    "added": added, "already": already})
 
 
 @router.delete("/emoji-packs/{name}", description="Remove an emoji pack (superadmin)")

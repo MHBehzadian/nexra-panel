@@ -17,7 +17,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ErrorBox, Field, Notice, Spinner, Switch, selectClass, useAction } from './common'
+import { BotName, ErrorBox, Field, Notice, Spinner, Switch, selectClass, useAction } from './common'
 
 const EMPTY: TelegramBotForm = { name: '', url: '', owner_key: '', manager_key: '', admin_id: null, is_active: true }
 
@@ -68,8 +68,7 @@ export function ManageBots({ bots, onChange }: { bots: TelegramBot[]; onChange: 
                     <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
                         <div className="min-w-0">
                             <div className="font-semibold flex items-center gap-2">
-                                {b.name}
-                                {b.bot_username && <span className="text-xs text-muted-foreground" dir="ltr">@{b.bot_username}</span>}
+                                <BotName name={b.name} username={b.bot_username} usernameClass="text-xs text-muted-foreground" />
                                 {!b.is_active && <Badge variant="secondary">غیرفعال</Badge>}
                             </div>
                             <div className="text-xs text-muted-foreground truncate" dir="ltr">

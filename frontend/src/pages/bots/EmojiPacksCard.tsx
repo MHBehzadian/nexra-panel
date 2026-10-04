@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { botAPI, botsAPI, EmojiPack, PushResult, TelegramBot } from '@/lib/bots-api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ErrorBox, Loading, Notice, Spinner, useAction, useLoad } from './common'
@@ -33,8 +33,9 @@ export function EmojiPacksCard({ bots }: { bots: TelegramBot[] }) {
                     <Sparkles className="h-5 w-5 text-amber-500" /> پک‌های ایموجی پریمیوم
                 </CardTitle>
                 <CardDescription className="leading-6">
-                    فقط ایموجی‌های همین پک‌ها روی دکمه‌ها و در متن‌های ربات‌ها قابل استفاده‌اند (در پنل و در منوی خود ربات). لینک پک را از تلگرام کپی
-                    کنید: روی یک ایموجی پریمیوم بزنید ← نام پک ← اشتراک‌گذاری.
+                    فقط ایموجی‌های همین پک‌ها روی دکمه‌ها و در متن‌های ربات‌ها قابل استفاده‌اند (در پنل و در منوی خود ربات). هر کدام از این‌ها را بگذارید:
+                    لینک پک (روی ایموجی در تلگرام بزنید ← نام پک ← اشتراک‌گذاری)، شناسه‌ی ایموجی‌ها، یا کل پیامی که دکمه‌ی «🆔 شناسه ایموجی پریمیوم» ربات
+                    می‌دهد. پک هر ایموجی خودش پیدا و کامل اضافه می‌شود.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -42,16 +43,27 @@ export function EmojiPacksCard({ bots }: { bots: TelegramBot[] }) {
                     <p className="text-sm text-muted-foreground">اول یک ربات وصل کنید؛ پک‌ها از طریق ربات خوانده می‌شوند.</p>
                 ) : (
                     <form
-                        className="flex gap-2"
+                        className="flex flex-col gap-2 sm:flex-row sm:items-start"
                         onSubmit={async (e) => {
                             e.preventDefault()
-                            const r = await act.run(() => botsAPI.addPack(link.trim()), 'پک اضافه شد و برای ربات‌ها فرستاده شد')
-                            if (r) setLink('')
+                            const r = await act.run(() => botsAPI.addPack(link.trim()))
+                            if (r && r !== true) {
+                                setLink('')
+                                act.setNotice(
+                                    `اضافه شد: ${r.added.join('، ')}` + (r.already.length ? ` — از قبل بود: ${r.already.join('، ')}` : '') + '. برای ربات‌ها هم فرستاده شد.'
+                                )
+                            }
                             after(r)
                         }}
                     >
-                        <Input dir="ltr" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://t.me/addemoji/…" />
-                        <Button type="submit" disabled={!link.trim() || act.busy}>
+                        <Textarea
+                            dir="ltr"
+                            rows={link.includes('\n') ? 5 : 2}
+                            value={link}
+                            onChange={(e) => setLink(e.target.value)}
+                            placeholder={'https://t.me/addemoji/…\n5310241962127820707 5933948939530145209 …'}
+                        />
+                        <Button type="submit" disabled={!link.trim() || act.busy} className="shrink-0">
                             {act.busy ? <Spinner className="ml-1" /> : <Plus className="h-4 w-4 ml-1" />} افزودن
                         </Button>
                     </form>

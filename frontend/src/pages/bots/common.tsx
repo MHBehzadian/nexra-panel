@@ -187,3 +187,22 @@ export function Empty({ text }: { text: string }) {
 
 export const selectClass =
     'flex h-11 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+
+// A bot's name is usually "@username": show it once, left-to-right (an RTL
+// page would otherwise print "username@").
+export function sameAsUsername(name: string, username?: string | null): boolean {
+    return !!username && name.replace(/^@/, '').toLowerCase() === username.toLowerCase()
+}
+
+export function BotName({ name, username, usernameClass }: { name: string; username?: string | null; usernameClass?: string }) {
+    return (
+        <>
+            <bdi dir="ltr">{name}</bdi>
+            {username && !sameAsUsername(name, username) && (
+                <bdi dir="ltr" className={usernameClass}>
+                    @{username}
+                </bdi>
+            )}
+        </>
+    )
+}
