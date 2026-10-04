@@ -240,6 +240,7 @@ export interface Paged<T> {
 }
 
 export interface BotButtons {
+    mode: 'reply' | 'inline'
     layout: string[][]
     buttons: Record<string, { style?: string; emoji?: string; hidden?: boolean }>
     labels: Record<string, string>

@@ -200,7 +200,7 @@ export function BotsPage() {
                             {activeTab === 'users' && <UsersTab api={api} />}
                             {activeTab === 'services' && <ServicesTab api={api} />}
                             {activeTab === 'discounts' && <DiscountsTab api={api} />}
-                            {activeTab === 'buttons' && <ButtonsTab api={api} />}
+                            {activeTab === 'buttons' && <ButtonsTab api={api} botKey={String(botId)} botName={current?.name || ''} />}
                             {activeTab === 'texts' && <TextsTab api={api} />}
                             {activeTab === 'settings' && <SettingsTab api={api} />}
                             {activeTab === 'autopay' && <AutopayTab api={api} superadmin={superadmin} />}

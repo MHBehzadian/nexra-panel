@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { Copy, Download, KeyRound, Smartphone, Upload, Github } from 'lucide-react'
+import { Copy, Download, KeyRound, Smartphone, Upload, Github, RefreshCw } from 'lucide-react'
 import { BotAPI, BotAutopay, botsAPI } from '@/lib/bots-api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -97,36 +97,123 @@ export function AutopayTab({ api, superadmin }: { api: BotAPI; superadmin: boole
 
             <Card>
                 <CardHeader>
-                    <CardTitle>نصب و اتصال اپ</CardTitle>
+                    <CardTitle className="flex flex-wrap items-center gap-2">
+                        نصب و اتصال اپ <Badge variant="gold">نسخه آزمایشی</Badge>
+                    </CardTitle>
+                    <CardDescription className="leading-6">
+                        اپ اندروید «تأیید خودکار Nexra» هنوز آزمایشی است. چند روز اول، شارژهای خودکار را با پیامک‌های بانک هم مقایسه کنید و اگر
+                        پیامکی تشخیص داده نشد، از بخش «آخرین پیامک‌ها» همین صفحه ببینید چه رسیده است.
+                    </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4 text-sm leading-7">
-                    <ol className="list-decimal pr-5 space-y-1">
-                        <li>اپ را دانلود و روی گوشی‌ای که پیامک‌های بانک به آن می‌آید نصب کنید.</li>
-                        <li>اجازه‌ی خواندن پیامک و «اجازه‌ی اجرای دائمی (بهینه‌سازی باتری)» را به اپ بدهید.</li>
-                        <li>
-                            «نمایش کد» را بزنید و کد اتصال را به گوشی برسانید: QR را با دوربین گوشی اسکن کنید یا متن را کپی کنید. بعد در اپ
-                            جای‌گذاری‌اش کنید و «اتصال به بات» را بزنید.
-                        </li>
-                        <li>با «تست ارتباط با سرور» در اپ مطمئن شوید «آخرین ارتباط گوشی» اینجا «همین الان» می‌شود.</li>
-                    </ol>
-                    <div className="flex flex-wrap gap-2">
-                        <Button disabled={!apk.data?.available || act.busy} onClick={() => act.run(() => botsAPI.apkDownload())}>
-                            <Download className="h-4 w-4 ml-1" /> دانلود اپ اندروید
-                        </Button>
-                        {apk.data?.available ? (
-                            <span className="self-center text-xs text-muted-foreground">
-                                {apk.data.version ? `نسخه ${apk.data.version} · ` : ''}
-                                {apk.data.size ? size(apk.data.size) : ''}
-                            </span>
-                        ) : (
-                            <span className="self-center text-xs text-muted-foreground">
-                                {superadmin ? 'هنوز فایلی بارگذاری نشده.' : 'هنوز فایلی بارگذاری نشده؛ به مدیر پنل اطلاع دهید.'}
-                            </span>
-                        )}
-                    </div>
+                <CardContent className="space-y-3 text-sm leading-7">
+                    <GuideStep n={1} title="دانلود اپ">
+                        <p>روی گوشی‌ای که پیامک‌های واریز بانک به آن می‌رسد، همین صفحه را باز کنید و اپ را بگیرید.</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button disabled={!apk.data?.available || act.busy} onClick={() => act.run(() => botsAPI.apkDownload())}>
+                                <Download className="h-4 w-4 ml-1" /> دانلود اپ اندروید (آزمایشی)
+                            </Button>
+                            {apk.data?.available ? (
+                                <span className="text-xs text-muted-foreground">
+                                    {apk.data.version ? `نسخه ${apk.data.version} · ` : ''}
+                                    {apk.data.size ? size(apk.data.size) : ''}
+                                </span>
+                            ) : (
+                                <span className="text-xs text-muted-foreground">
+                                    {superadmin ? 'هنوز فایلی بارگذاری نشده (پایین همین بخش).' : 'هنوز فایلی بارگذاری نشده؛ به مدیر پنل اطلاع دهید.'}
+                                </span>
+                            )}
+                        </div>
+                    </GuideStep>
+                    <GuideStep n={2} title="نصب">
+                        <p>
+                            فایل <code dir="ltr">nexra-autopay.apk</code> را باز کنید. اگر اندروید پرسید، «اجازه‌ی نصب از این منبع» را بدهید (چون اپ از
+                            گوگل‌پلی نصب نمی‌شود). اگر نسخه‌ی قبلی را دارید و نصب خطا داد، اول آن را حذف کنید.
+                        </p>
+                    </GuideStep>
+                    <GuideStep n={3} title="اجازه‌ها">
+                        <p>
+                            وقتی اپ اجازه‌ی <b>دریافت و خواندن پیامک</b> خواست، قبول کنید. بعد دکمه‌ی <b>«اجازه‌ی اجرای دائمی (بهینه‌سازی باتری)»</b> را
+                            در اپ بزنید و «اجازه» را انتخاب کنید تا اندروید اپ را در پس‌زمینه نبندد.
+                        </p>
+                    </GuideStep>
+                    <GuideStep n={4} title="اتصال به این ربات">
+                        <p>
+                            «نمایش کد» را بزنید. کد را کپی کنید (یا QR را با دوربین گوشی اسکن کنید تا متنش را بگیرید)، در کادر اپ جای‌گذاری کنید و{' '}
+                            <b>«اتصال به بات»</b> را بزنید.
+                        </p>
+                        <div className="rounded-xl border border-border p-3 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <b>کد اتصال این ربات</b>
+                                <Button size="sm" variant="outline" onClick={() => setShowPairing((v) => !v)}>
+                                    {showPairing ? 'پنهان کردن' : 'نمایش کد'}
+                                </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">این کد مثل رمز است؛ هر کس داشته باشد می‌تواند برای ربات پیامک واریز بفرستد.</p>
+                            {showPairing && (
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="rounded-xl bg-white p-3">
+                                        <QRCodeSVG value={a.pairing} size={200} />
+                                    </div>
+                                    <div className="flex w-full items-center gap-2">
+                                        <code className="flex-1 break-all rounded-lg bg-muted/50 p-2 text-xs" dir="ltr">
+                                            {a.pairing}
+                                        </code>
+                                        <Button
+                                            size="icon"
+                                            variant="outline"
+                                            onClick={() => {
+                                                navigator.clipboard?.writeText(a.pairing)
+                                                act.setNotice('کد کپی شد')
+                                            }}
+                                            aria-label="کپی"
+                                        >
+                                            <Copy className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-auto min-h-9 whitespace-normal text-right"
+                                disabled={act.busy}
+                                onClick={async () => {
+                                    if (!confirm('کلید جدید ساخته شود؟ گوشی فعلی قطع می‌شود و باید دوباره کد را در اپ بزند.')) return
+                                    const r = await act.run(() => api.post<BotAutopay>('autopay/new-key'), 'کلید جدید ساخته شد؛ کد را دوباره در اپ بزنید')
+                                    if (r && r !== true) remote.setData(r)
+                                }}
+                            >
+                                {act.busy ? <Spinner className="ml-1" /> : <KeyRound className="h-4 w-4 ml-1" />} ساخت کلید جدید (اگر گوشی عوض شد)
+                            </Button>
+                        </div>
+                    </GuideStep>
+                    <GuideStep n={5} title="آزمایش" done={seen.ok}>
+                        <p>
+                            در اپ <b>«تست ارتباط با سرور»</b> را بزنید و این‌جا «بارگذاری دوباره» را بزنید. «آخرین ارتباط گوشی» باید «همین الان» شود.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={seen.ok ? 'success' : 'secondary'}>
+                                {seen.ok ? 'گوشی وصل است' : 'هنوز وصل نیست'} · {seen.text}
+                            </Badge>
+                            <Button size="sm" variant="outline" onClick={remote.reload}>
+                                <RefreshCw className="h-4 w-4 ml-1" /> بارگذاری دوباره
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            آخر سر «تأیید خودکار روشن است» (بالای همین صفحه) را روشن کنید. از این به بعد کارت به کارت‌ها با رسیدن پیامک بانک خودکار شارژ
+                            می‌شوند.
+                        </p>
+                    </GuideStep>
+                    <GuideStep n={6} title="اختیاری: فقط پیامک‌های بانک">
+                        <p>
+                            اگر روی این گوشی پیامک‌های دیگر هم می‌آید، در کادر «فقط پیامک این فرستنده‌ها» نام یا شماره‌ی فرستنده‌ی بانک را بنویسید و
+                            «ذخیره‌ی فیلتر فرستنده» را بزنید. با «بازبینی پیامک‌های ۲۴ ساعت اخیر» پیامک‌های جامانده هم دوباره فرستاده می‌شوند.
+                        </p>
+                    </GuideStep>
+
                     {superadmin && (
                         <div className="flex flex-wrap gap-2 rounded-lg border border-dashed border-border p-3">
-                            <span className="w-full text-xs text-muted-foreground">فقط شما: نسخه‌ی اپ برای همه‌ی ادمین‌ها</span>
+                            <span className="w-full text-xs text-muted-foreground">فقط شما: فایل اپ برای همه‌ی ادمین‌ها</span>
                             <Button
                                 size="sm"
                                 variant="outline"
@@ -153,43 +240,6 @@ export function AutopayTab({ api, superadmin }: { api: BotAPI; superadmin: boole
                             />
                         </div>
                     )}
-
-                    <div className="rounded-xl border border-border p-4 space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <b>کد اتصال این ربات</b>
-                            <Button size="sm" variant="outline" onClick={() => setShowPairing((v) => !v)}>
-                                {showPairing ? 'پنهان کردن' : 'نمایش کد'}
-                            </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">این کد مثل رمز است؛ هر کس داشته باشد می‌تواند برای ربات پیامک واریز بفرستد.</p>
-                        {showPairing && (
-                            <div className="flex flex-col items-center gap-3">
-                                <div className="rounded-xl bg-white p-3">
-                                    <QRCodeSVG value={a.pairing} size={220} />
-                                </div>
-                                <div className="flex w-full items-center gap-2">
-                                    <code className="flex-1 break-all rounded-lg bg-muted/50 p-2 text-xs" dir="ltr">
-                                        {a.pairing}
-                                    </code>
-                                    <Button size="icon" variant="outline" onClick={() => navigator.clipboard?.writeText(a.pairing)} aria-label="کپی">
-                                        <Copy className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={act.busy}
-                            onClick={async () => {
-                                if (!confirm('کلید جدید ساخته شود؟ گوشی فعلی قطع می‌شود و باید دوباره کد را اسکن کند.')) return
-                                const r = await act.run(() => api.post<BotAutopay>('autopay/new-key'), 'کلید جدید ساخته شد؛ کد را دوباره در اپ اسکن کنید')
-                                if (r && r !== true) remote.setData(r)
-                            }}
-                        >
-                            {act.busy ? <Spinner className="ml-1" /> : <KeyRound className="h-4 w-4 ml-1" />} ساخت کلید جدید
-                        </Button>
-                    </div>
                 </CardContent>
             </Card>
 
@@ -232,6 +282,25 @@ export function AutopayTab({ api, superadmin }: { api: BotAPI; superadmin: boole
                     )}
                 </CardContent>
             </Card>
+        </div>
+    )
+}
+
+function GuideStep({ n, title, done, children }: { n: number; title: string; done?: boolean; children: React.ReactNode }) {
+    return (
+        <div className="flex gap-3 rounded-xl border border-border p-3">
+            <span
+                className={
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ' +
+                    (done ? 'bg-brand-green text-white' : 'bg-primary text-primary-foreground')
+                }
+            >
+                {done ? '✓' : n.toLocaleString('fa-IR')}
+            </span>
+            <div className="min-w-0 flex-1 space-y-2">
+                <b className="block">{title}</b>
+                {children}
+            </div>
         </div>
     )
 }

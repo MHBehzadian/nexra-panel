@@ -45,7 +45,7 @@ ALLOWED_RESOURCES = {
     "info", "stats", "settings", "texts", "buttons", "products", "categories",
     "giftcodes", "discounts", "help", "users", "services", "payments",
     "payment-settings", "cancel-requests", "autopay", "affiliates", "broadcast",
-    "admins", "panels",
+    "admins", "panels", "emoji", "emoji-pack",
 }
 # Resources an admin may only read (writing them is the superadmin's).
 READ_ONLY_FOR_ADMINS = {"panels"}
