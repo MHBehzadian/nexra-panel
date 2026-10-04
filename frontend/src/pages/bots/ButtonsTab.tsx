@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { ErrorBox, Loading, Notice, Spinner, selectClass, useAction, useLoad } from './common'
 import { PremiumEmoji } from './emoji'
+import { OtherButtons } from './OtherButtons'
 
 type Style = { style?: string; emoji?: string; hidden?: boolean }
 type Mode = 'reply' | 'inline'
@@ -30,13 +31,13 @@ type Target = { type: 'row'; row: number; index: number } | { type: 'gap'; at: n
 
 const MAX_PER_ROW = 3
 const MAX_LABEL = 48
-const COLORS: Array<{ v: string; label: string; swatch: string; btn: string }> = [
+export const COLORS: Array<{ v: string; label: string; swatch: string; btn: string }> = [
     { v: '', label: 'خنثی', swatch: 'bg-slate-200', btn: 'bg-white text-slate-800 dark:bg-slate-700 dark:text-white' },
     { v: 'primary', label: 'آبی', swatch: 'bg-[#3e7be6]', btn: 'bg-[#3e7be6] text-white' },
     { v: 'success', label: 'سبز', swatch: 'bg-[#26a68a]', btn: 'bg-[#26a68a] text-white' },
     { v: 'danger', label: 'قرمز', swatch: 'bg-[#d9505a]', btn: 'bg-[#d9505a] text-white' },
 ]
-const btnClass = (style?: string) => (COLORS.find((c) => c.v === (style || '')) || COLORS[0]).btn
+export const btnClass = (style?: string) => (COLORS.find((c) => c.v === (style || '')) || COLORS[0]).btn
 const DEFAULT_LAYOUT = [
     ['text_sell', 'text_usertest'],
     ['text_Purchased_services', 'text_Tariff_list'],
@@ -60,7 +61,12 @@ export function ButtonsTab({ api, botKey, botName }: { api: BotAPI; botKey: stri
     const remote = useLoad(() => api.get<BotButtons>('buttons'), [api])
     if (remote.loading && !remote.data) return <Loading />
     if (!remote.data) return <ErrorBox error={remote.error} />
-    return <ButtonsEditor api={api} botKey={botKey} botName={botName} d={remote.data} onSaved={remote.setData} />
+    return (
+        <div className="space-y-5">
+            <ButtonsEditor api={api} botKey={botKey} botName={botName} d={remote.data} onSaved={remote.setData} />
+            <OtherButtons api={api} botKey={botKey} />
+        </div>
+    )
 }
 
 function visibleRows(layout: string[][], styles: Record<string, Style>) {
@@ -764,7 +770,7 @@ export function loadPacks(fresh = false): Promise<EmojiPacks> {
     return packsCache
 }
 
-function EmojiPicker({ api, botKey, value, onChange }: { api: BotAPI; botKey: string; value: string; onChange: (v: string) => void }) {
+export function EmojiPicker({ api, botKey, value, onChange }: { api: BotAPI; botKey: string; value: string; onChange: (v: string) => void }) {
     const packs = useLoad(() => loadPacks(), [])
     const [tab, setTab] = useState(0)
     const list = packs.data?.packs || []
@@ -797,7 +803,7 @@ function EmojiPicker({ api, botKey, value, onChange }: { api: BotAPI; botKey: st
             ) : !list.length ? (
                 <p className="rounded-lg bg-muted/40 p-2 text-xs text-muted-foreground">
                     هنوز پک ایموجی‌ای برای ربات‌ها تعریف نشده است.{' '}
-                    {getUserRole() === 'superadmin' ? 'از بخش «پک‌های ایموجی پریمیوم» بالای همین صفحه اضافه کنید.' : 'از پشتیبانی بخواهید برایتان اضافه کنند.'}
+                    {getUserRole() === 'superadmin' ? 'از بخش «پک‌های ایموجی پریمیوم» بالای همین صفحه اضافه کنید.' : 'برای افزودن، لطفاً با پشتیبانی تماس بگیرید.'}
                 </p>
             ) : (
                 <>

@@ -268,6 +268,15 @@ export interface Paged<T> {
     items: T[]
 }
 
+export interface LabelStyle {
+    style?: string
+    emoji?: string
+}
+export interface BotLabelStyles {
+    styles: Record<string, LabelStyle>
+    suggestions: { categories: string[]; products: string[]; locations: string[]; fixed: string[] }
+}
+
 export interface BotButtons {
     mode: 'reply' | 'inline'
     layout: string[][]

@@ -42,8 +42,8 @@ export function LockedBots() {
                         <Lock className="h-7 w-7 text-muted-foreground" />
                     </span>
                     <div className="space-y-1">
-                        <b className="block text-lg">این بخش برای شما غیرفعال می‌باشد</b>
-                        <p className="text-sm text-muted-foreground leading-6">از پشتیبانی بخواهید تا برای شما فعال کنند.</p>
+                        <b className="block text-lg">دسترسی به این بخش برای حساب شما فعال نشده است</b>
+                        <p className="text-sm text-muted-foreground leading-6">جهت فعال‌سازی، لطفاً با پشتیبانی تماس بگیرید.</p>
                     </div>
                     <a
                         href={SUPPORT_URL}
