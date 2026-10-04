@@ -9,3 +9,5 @@ __pycache__/
 *.jpeg
 *.apk
 data/nexra-autopay.json
+data/emoji-packs.json
+data/shared-admin-ids.json
