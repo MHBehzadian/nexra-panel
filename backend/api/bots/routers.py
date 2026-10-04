@@ -232,6 +232,73 @@ async def delete_bot(bot_id: int, db: Session = Depends(get_db), user: dict = De
     return ResponseModel(success=True, message="Bot disconnected")
 
 
+async def _guess_owner(db: Session, probe) -> tuple[Admins | None, str]:
+    """Which panel admin runs this bot.
+
+    1. The bot sells from a Nexra Panel with some reseller's credentials: the
+       panel admin with that username is the owner.
+    2. Otherwise the panel admin whose Telegram id is the bot's main admin (or
+       one of its admins) — when that points at a single person.
+    """
+    admins = crud.get_all_admins(db)
+    by_name = {a.username.lower(): a for a in admins}
+    code, panels = await _bot_call(probe, "GET", "panels")
+    if code == 200:
+        names = {str(p.get("username_panel") or "").lower() for p in panels.get("data") or [] if p.get("type") == "nexra"}
+        found = [by_name[n] for n in names if n in by_name]
+        if len(found) == 1:
+            return found[0], f"its Nexra panel uses the reseller {found[0].username}"
+        if len(found) > 1:
+            return None, "it sells from several resellers: " + ", ".join(a.username for a in found)
+    code, info = await _bot_call(probe, "GET", "info")
+    main = str((info.get("data") or {}).get("admin_id") or "") if code == 200 else ""
+    code, adm = await _bot_call(probe, "GET", "admins")
+    ids = [main] + [str(x) for x in ((adm.get("data") or {}).get("admins") or [])] if code == 200 else [main]
+    for tid in [i for i in ids if i.isdigit()]:
+        matches = [a for a in admins if a.telegram_id and str(a.telegram_id) == tid]
+        if len(matches) == 1:
+            return matches[0], f"its admin's Telegram id {tid} belongs to {matches[0].username}"
+        if len(matches) > 1:
+            return None, f"Telegram id {tid} belongs to several admins: " + ", ".join(a.username for a in matches)
+    return None, "no panel admin matches its Nexra reseller or its admins' Telegram ids"
+
+
+@router.post("/register", description="Connect or refresh a bot and give it to its owner automatically (superadmin; used by install.sh)")
+async def register_bot(body: dict, db: Session = Depends(get_db), user: dict = Depends(get_current_admin)):
+    if not _is_superadmin(user):
+        return _fail(status.HTTP_403_FORBIDDEN, "Access denied. Only superadmin can access this endpoint")
+    url = _normalize_url(str(body.get("url", "")))
+    owner_key, manager_key = str(body.get("owner_key", "")).strip(), str(body.get("manager_key", "")).strip()
+    if not url.startswith(("http://", "https://")):
+        return _fail(400, "Bot address must start with https://")
+    info, err = await _verify_keys(url, owner_key, manager_key)
+    if err:
+        return _fail(400, err)
+    probe = type("Probe", (), {"url": url, "owner_key": owner_key, "name": url})()
+    owner, reason = await _guess_owner(db, probe)
+    existing = next((b for b in crud.get_all_bots(db) if b.url == url), None)
+    if existing:
+        values = dict(owner_key=owner_key, manager_key=manager_key, bot_username=info.get("bot_username"))
+        # an assignment made by hand is kept
+        if existing.admin_id is None and owner:
+            values["admin_id"] = owner.id
+        bot = crud.update_bot(db, existing, **values)
+        created = False
+    else:
+        name = str(body.get("name") or "").strip() or ("@" + info["bot_username"] if info.get("bot_username") else url)
+        base, n = name, 2
+        while crud.get_bot_by_name(db, name):
+            name, n = f"{base} ({n})", n + 1
+        bot = crud.add_bot(db, name=name, url=url, owner_key=owner_key, manager_key=manager_key,
+                           admin_id=owner.id if owner else None, bot_username=info.get("bot_username"), is_active=True)
+        created = True
+    await _push_emoji_allow(db, bot)
+    logger.info(f"Bot registered: {bot.name} ({url}) owner={owner.username if owner else None} ({reason})")
+    out = _output(db, bot, True).model_dump(mode="json")
+    return ResponseModel(success=True, message="Bot registered", data={"bot": out, "created": created,
+                                                                        "assigned_to": out.get("admin_username"), "reason": reason})
+
+
 @router.post("/manage/{bot_id}/check", description="Re-check a bot's address and keys (superadmin)")
 async def check_bot(bot_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_admin)):
     if not _is_superadmin(user):
