@@ -6,7 +6,22 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Empty, ErrorBox, Loading, Notice, Spinner, Switch, money, useAction, useLoad } from './common'
+import { Empty, ErrorBox, Loading, Notice, Spinner, money, useAction, useLoad } from './common'
+
+const MODES: Array<{ v: BotAutopay['mode']; title: string; hint: string; badge?: string }> = [
+    { v: 'off', title: 'خاموش (بررسی دستی)', hint: 'هر رسید را خودتان در ربات یا در «پرداخت‌ها» تأیید یا رد می‌کنید.' },
+    {
+        v: 'no_review',
+        title: 'تأیید خودکار بدون بررسی',
+        hint: 'هر رسید کارت به کارت حدود یک دقیقه بعد از ارسال، بدون بررسی تأیید و شارژ می‌شود و رسید برای شما فرستاده می‌شود تا خودتان هم بررسی کنید. سریع است، ولی رسید جعلی هم تأیید می‌شود.',
+    },
+    {
+        v: 'sms',
+        title: 'تأیید خودکار با بررسی واقعی پیامک‌ها',
+        badge: 'نسخه آزمایشی',
+        hint: 'اپ اندروید پیامک واریز بانک را می‌خواند و فقط وقتی همان مبلغ واقعاً به حساب نشسته باشد، شارژ می‌کند. به یک گوشی اندرویدی که پیامک‌های بانک به آن می‌آید نیاز دارد.',
+    },
+]
 
 const SMS_STATUS: Record<string, string> = {
     matched: 'شارژ شد',
@@ -54,47 +69,70 @@ export function AutopayTab({ api, superadmin }: { api: BotAPI; superadmin: boole
                     <CardTitle className="flex items-center gap-2">
                         <Smartphone className="h-5 w-5 text-primary" /> تأیید خودکار پرداخت
                     </CardTitle>
-                    <CardDescription className="leading-6">
-                        اپ اندروید پیامک‌های واریز بانک را به ربات می‌فرستد. ربات برای هر کارت به کارت مبلغی یکتا (با چند تومان اختلاف) می‌سازد
-                        و با رسیدن پیامک همان مبلغ، شارژ را بدون دخالت شما انجام می‌دهد.
-                    </CardDescription>
+                    <CardDescription className="leading-6">رسیدهای کارت به کارت چطور تأیید شوند؟ فقط یکی از این‌ها در هر زمان فعال است.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <Switch
-                        checked={a.enabled}
-                        disabled={act.busy}
-                        onChange={async (v) => {
-                            const r = await act.run(() => api.put<BotAutopay>('autopay', { enabled: v }))
-                            if (r && r !== true) remote.setData(r)
-                        }}
-                        label="تأیید خودکار روشن است"
-                        hint="خاموش که باشد، کارت به کارت مثل قبل با بررسی رسید کار می‌کند."
-                    />
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                        <div className="rounded-lg bg-muted/40 p-3">
-                            <div className="text-xs text-muted-foreground">آخرین ارتباط گوشی</div>
-                            <div className="font-medium flex items-center gap-1">
-                                {seen.text} <Badge variant={seen.ok ? 'success' : 'secondary'}>{seen.ok ? 'وصل' : 'قطع'}</Badge>
+                <CardContent className="space-y-3">
+                    {MODES.map((m) => (
+                        <button
+                            key={m.v}
+                            disabled={act.busy}
+                            onClick={async () => {
+                                if (m.v === a.mode) return
+                                if (m.v === 'no_review' && !confirm('در این حالت هر رسیدی، حتی رسید جعلی، حدود یک دقیقه بعد تأیید می‌شود. فعال شود؟')) return
+                                const r = await act.run(() => api.put<BotAutopay>('autopay', { mode: m.v }), 'ذخیره شد')
+                                if (r && r !== true) remote.setData(r)
+                            }}
+                            className={
+                                'flex w-full items-start gap-3 rounded-xl border p-3 text-right transition ' +
+                                (a.mode === m.v ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:bg-accent/40')
+                            }
+                        >
+                            <span
+                                className={
+                                    'mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ' +
+                                    (a.mode === m.v ? 'border-primary' : 'border-muted-foreground/40')
+                                }
+                            >
+                                {a.mode === m.v && <span className="h-2 w-2 rounded-full bg-primary" />}
+                            </span>
+                            <span className="space-y-0.5">
+                                <span className="flex flex-wrap items-center gap-2 font-semibold">
+                                    {m.title}
+                                    {m.badge && <Badge variant="gold">{m.badge}</Badge>}
+                                </span>
+                                <span className="block text-xs leading-6 text-muted-foreground">{m.hint}</span>
+                            </span>
+                        </button>
+                    ))}
+                    {a.mode === 'sms' && (
+                        <div className="grid grid-cols-2 gap-3 pt-1 text-sm md:grid-cols-4">
+                            <div className="rounded-lg bg-muted/40 p-3">
+                                <div className="text-xs text-muted-foreground">آخرین ارتباط گوشی</div>
+                                <div className="flex items-center gap-1 font-medium">
+                                    {seen.text} <Badge variant={seen.ok ? 'success' : 'secondary'}>{seen.ok ? 'وصل' : 'قطع'}</Badge>
+                                </div>
+                            </div>
+                            <div className="rounded-lg bg-muted/40 p-3">
+                                <div className="text-xs text-muted-foreground">گوشی</div>
+                                <div className="truncate font-medium" dir="ltr">
+                                    {a.device || '—'}
+                                </div>
+                            </div>
+                            <div className="rounded-lg bg-muted/40 p-3">
+                                <div className="text-xs text-muted-foreground">پرداخت‌های خودکار</div>
+                                <div className="font-medium">{a.paid_count}</div>
+                            </div>
+                            <div className="rounded-lg bg-muted/40 p-3">
+                                <div className="text-xs text-muted-foreground">در انتظار واریز</div>
+                                <div className="font-medium">{a.open_count}</div>
                             </div>
                         </div>
-                        <div className="rounded-lg bg-muted/40 p-3">
-                            <div className="text-xs text-muted-foreground">گوشی</div>
-                            <div className="font-medium truncate" dir="ltr">
-                                {a.device || '—'}
-                            </div>
-                        </div>
-                        <div className="rounded-lg bg-muted/40 p-3">
-                            <div className="text-xs text-muted-foreground">پرداخت‌های خودکار</div>
-                            <div className="font-medium">{a.paid_count}</div>
-                        </div>
-                        <div className="rounded-lg bg-muted/40 p-3">
-                            <div className="text-xs text-muted-foreground">در انتظار واریز</div>
-                            <div className="font-medium">{a.open_count}</div>
-                        </div>
-                    </div>
+                    )}
                 </CardContent>
             </Card>
 
+            {a.mode === 'sms' && (
+                <>
             <Card>
                 <CardHeader>
                     <CardTitle className="flex flex-wrap items-center gap-2">
@@ -200,8 +238,7 @@ export function AutopayTab({ api, superadmin }: { api: BotAPI; superadmin: boole
                             </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            آخر سر «تأیید خودکار روشن است» (بالای همین صفحه) را روشن کنید. از این به بعد کارت به کارت‌ها با رسیدن پیامک بانک خودکار شارژ
-                            می‌شوند.
+                            از این به بعد کارت به کارت‌ها با رسیدن پیامک بانک خودکار شارژ می‌شوند (گزینه‌ی «با بررسی واقعی پیامک‌ها» بالای همین صفحه).
                         </p>
                     </GuideStep>
                     <GuideStep n={6} title="اختیاری: فقط پیامک‌های بانک">
@@ -243,6 +280,10 @@ export function AutopayTab({ api, superadmin }: { api: BotAPI; superadmin: boole
                 </CardContent>
             </Card>
 
+                </>
+            )}
+
+            {a.mode === 'sms' && (
             <Card>
                 <CardHeader>
                     <CardTitle>آخرین پیامک‌ها</CardTitle>
@@ -282,6 +323,7 @@ export function AutopayTab({ api, superadmin }: { api: BotAPI; superadmin: boole
                     )}
                 </CardContent>
             </Card>
+            )}
         </div>
     )
 }

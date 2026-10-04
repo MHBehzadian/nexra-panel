@@ -31,6 +31,8 @@ import { SettingsTab } from './bots/SettingsTab'
 import { AutopayTab } from './bots/AutopayTab'
 import { MessagesTab } from './bots/MessagesTab'
 import { PanelsTab } from './bots/PanelsTab'
+import { EmojiPacksCard } from './bots/EmojiPacksCard'
+import { LockedBots } from './bots/Locked'
 
 const TABS = [
     { key: 'overview', label: 'خلاصه', icon: LayoutDashboard },
@@ -130,13 +132,10 @@ export function BotsPage() {
             <ErrorBox error={error} />
 
             {superadmin && <ManageBots bots={bots} onChange={load} />}
+            {superadmin && <EmojiPacksCard bots={bots} />}
 
             {!visibleBots.length ? (
-                !superadmin && (
-                    <div className="rounded-xl border border-border p-8 text-center text-muted-foreground">
-                        هنوز رباتی به حساب شما وصل نشده است. برای راه‌اندازی ربات فروش با پشتیبانی تماس بگیرید.
-                    </div>
-                )
+                !superadmin && <LockedBots />
             ) : (
                 <>
                     {visibleBots.length > 1 && (

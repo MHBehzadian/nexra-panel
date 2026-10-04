@@ -45,7 +45,7 @@ ALLOWED_RESOURCES = {
     "info", "stats", "settings", "texts", "buttons", "products", "categories",
     "giftcodes", "discounts", "help", "users", "services", "payments",
     "payment-settings", "cancel-requests", "autopay", "affiliates", "broadcast",
-    "admins", "panels", "emoji", "emoji-pack",
+    "admins", "panels", "emoji", "emoji-pack", "emoji-allow",
 }
 # Resources an admin may only read (writing them is the superadmin's).
 READ_ONLY_FOR_ADMINS = {"panels"}
@@ -180,6 +180,7 @@ async def create_bot(
         is_active=bot_input.is_active,
     )
     logger.info(f"Bot connected: {name} ({url})")
+    await _push_emoji_allow(db, bot)
     return ResponseModel(success=True, message="Bot connected", data=_output(db, bot, True).model_dump(mode="json"))
 
 
@@ -243,7 +244,119 @@ async def check_bot(bot_id: int, db: Session = Depends(get_db), user: dict = Dep
         return _fail(502, err)
     if info.get("bot_username") and info.get("bot_username") != bot.bot_username:
         crud.update_bot(db, bot, bot_username=info.get("bot_username"))
+    await _push_emoji_allow(db, bot)
     return ResponseModel(success=True, message="Bot is reachable", data=info)
+
+
+# ---------------------------------------------------------------- premium emoji packs
+#
+# The superadmin picks which custom emoji packs the bots may use. Packs are
+# resolved through a connected bot (Telegram only answers bots), kept here,
+# and the union of their emoji ids is pushed to every bot, which then refuses
+# any other premium emoji — from the panel and from its own Telegram menu.
+# Until a pack list is saved for the first time nothing is pushed and the
+# bots keep their old, unrestricted behaviour.
+
+PACKS_PATH = os.path.join(DATA_DIR, "emoji-packs.json")
+PACK_NAME = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+
+
+def _load_packs() -> list[dict] | None:
+    try:
+        with open(PACKS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return data.get("packs") if isinstance(data, dict) and isinstance(data.get("packs"), list) else None
+
+
+def _save_packs(packs: list[dict]) -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = PACKS_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"packs": packs}, f, ensure_ascii=False)
+    os.replace(tmp, PACKS_PATH)
+
+
+def _pack_name(link: str) -> str:
+    return (link or "").strip().rstrip("/").split("/")[-1].split("?")[0]
+
+
+async def _bot_call(bot: TelegramBots, method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            res = await client.request(method, f"{bot.url}/api/v1/{path}", json=body,
+                                       headers={"Authorization": f"Bearer {bot.owner_key}"})
+        return res.status_code, res.json()
+    except (httpx.HTTPError, ValueError) as e:
+        return 502, {"ok": False, "error": f"Bot is unreachable: {e.__class__.__name__}"}
+
+
+async def _push_emoji_allow(db: Session, only: TelegramBots | None = None) -> list[dict]:
+    """Send the allowed emoji ids to every bot (or one). Returns per-bot results."""
+    packs = _load_packs()
+    if packs is None:
+        return []
+    ids = sorted({e["id"] for p in packs for e in p.get("emojis", [])})
+    results = []
+    for bot in [only] if only else crud.get_all_bots(db):
+        code, body = await _bot_call(bot, "PUT", "emoji-allow", {"ids": ids})
+        results.append({"bot": bot.name, "ok": code == 200, "error": None if code == 200 else body.get("error")})
+        if code != 200:
+            logger.warning(f"emoji allow-list not pushed to {bot.name}: {body.get('error')}")
+    return results
+
+
+@router.get("/emoji-packs", description="The premium emoji packs bots may use")
+async def list_packs(user: dict = Depends(get_current_admin)):
+    packs = _load_packs()
+    return ResponseModel(success=True, message="ok", data={"configured": packs is not None, "packs": packs or []})
+
+
+@router.post("/emoji-packs", description="Allow a premium emoji pack (superadmin)")
+async def add_pack(body: dict, db: Session = Depends(get_db), user: dict = Depends(get_current_admin)):
+    if not _is_superadmin(user):
+        return _fail(status.HTTP_403_FORBIDDEN, "Access denied. Only superadmin can access this endpoint")
+    name = _pack_name(str(body.get("link", "")))
+    if not PACK_NAME.match(name):
+        return _fail(400, "Give the pack link (t.me/addemoji/NAME) or its name")
+    packs = _load_packs() or []
+    if any(p["name"].lower() == name.lower() for p in packs):
+        return _fail(409, "This pack is already added")
+    bots = [b for b in crud.get_all_bots(db) if b.is_active] or crud.get_all_bots(db)
+    if not bots:
+        return _fail(400, "Connect a bot first; packs are read through a bot")
+    code, res = await _bot_call(bots[0], "GET", f"emoji-pack/{name}")
+    if code != 200 or not res.get("ok"):
+        return _fail(code if code >= 400 else 502, res.get("error") or "Could not read the pack")
+    data = res["data"]
+    packs.append({"name": data["name"], "title": data.get("title") or data["name"],
+                  "emojis": [{"id": e["id"], "emoji": e.get("emoji", "")} for e in data.get("emojis", [])]})
+    _save_packs(packs)
+    pushed = await _push_emoji_allow(db)
+    return ResponseModel(success=True, message="Pack added", data={"packs": packs, "pushed": pushed})
+
+
+@router.delete("/emoji-packs/{name}", description="Remove an emoji pack (superadmin)")
+async def remove_pack(name: str, db: Session = Depends(get_db), user: dict = Depends(get_current_admin)):
+    if not _is_superadmin(user):
+        return _fail(status.HTTP_403_FORBIDDEN, "Access denied. Only superadmin can access this endpoint")
+    packs = _load_packs() or []
+    left = [p for p in packs if p["name"] != name]
+    if len(left) == len(packs):
+        return _fail(404, "Pack not found")
+    _save_packs(left)
+    pushed = await _push_emoji_allow(db)
+    return ResponseModel(success=True, message="Pack removed", data={"packs": left, "pushed": pushed})
+
+
+@router.post("/emoji-packs/sync", description="Send the allowed emoji to every bot again (superadmin)")
+async def sync_packs(db: Session = Depends(get_db), user: dict = Depends(get_current_admin)):
+    if not _is_superadmin(user):
+        return _fail(status.HTTP_403_FORBIDDEN, "Access denied. Only superadmin can access this endpoint")
+    if _load_packs() is None:
+        _save_packs([])
+    return ResponseModel(success=True, message="ok", data={"pushed": await _push_emoji_allow(db)})
 
 
 # ---------------------------------------------------------------- auto-confirm app
@@ -360,6 +473,12 @@ async def proxy(
     superadmin = _is_superadmin(user)
     if not superadmin and resource in READ_ONLY_FOR_ADMINS and request.method != "GET":
         return _fail(403, "Only the superadmin can change the bot's servers")
+    if resource == "emoji-allow" and request.method != "GET":
+        return _fail(403, "The allowed emoji follow the packs set in the panel")
+    if resource == "emoji-pack" and not superadmin:
+        allowed = {p["name"].lower() for p in (_load_packs() or [])}
+        if path.split("/", 1)[-1].lower() not in allowed:
+            return _fail(403, "Only the packs added by the panel owner can be used")
 
     body = await request.body()
     if len(body) > 2 * 1024 * 1024:

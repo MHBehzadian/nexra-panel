@@ -15,7 +15,8 @@ import {
     Sparkles,
     Trash2,
 } from 'lucide-react'
-import { BotAPI, BotButtons } from '@/lib/bots-api'
+import { BotAPI, BotButtons, EmojiPacks, botsAPI } from '@/lib/bots-api'
+import { getUserRole } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -752,10 +753,23 @@ function ButtonEditor({
     )
 }
 
+// Only the packs the panel owner added (Bot page → پک‌های ایموجی) can be
+// used; the bot refuses any other premium emoji too.
+let packsCache: Promise<EmojiPacks> | null = null
+export function loadPacks(fresh = false): Promise<EmojiPacks> {
+    if (!packsCache || fresh) packsCache = botsAPI.packs().catch((e) => {
+        packsCache = null
+        throw e
+    })
+    return packsCache
+}
+
 function EmojiPicker({ api, botKey, value, onChange }: { api: BotAPI; botKey: string; value: string; onChange: (v: string) => void }) {
-    const [pack, setPack] = useState('')
-    const [items, setItems] = useState<Array<{ id: string; emoji: string }> | null>(null)
-    const act = useAction()
+    const packs = useLoad(() => loadPacks(), [])
+    const [tab, setTab] = useState(0)
+    const list = packs.data?.packs || []
+    const inPacks = !value || list.some((p) => p.emojis.some((e) => e.id === value))
+    const pack = list[Math.min(tab, Math.max(0, list.length - 1))]
     return (
         <div className="space-y-2 rounded-xl border border-border p-3">
             <b className="flex items-center gap-1.5 text-sm">
@@ -768,52 +782,61 @@ function EmojiPicker({ api, botKey, value, onChange }: { api: BotAPI; botKey: st
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 text-xl">
                     {value ? <PremiumEmoji api={api} botKey={botKey} id={value} className="h-7 w-7" /> : <span className="text-xs text-muted-foreground">—</span>}
                 </span>
-                <Input
-                    dir="ltr"
-                    inputMode="numeric"
-                    placeholder="شناسه ایموجی"
-                    value={value}
-                    onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ''))}
-                />
+                <span className="flex-1 text-xs text-muted-foreground">{value ? 'آیکون انتخاب‌شده' : 'بدون آیکون'}</span>
                 {value && (
-                    <Button size="icon" variant="ghost" onClick={() => onChange('')} aria-label="حذف آیکون">
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                    <Button size="sm" variant="ghost" onClick={() => onChange('')}>
+                        <Trash2 className="h-4 w-4 ml-1 text-destructive" /> برداشتن
                     </Button>
                 )}
             </div>
-            <form
-                className="flex gap-2"
-                onSubmit={async (e) => {
-                    e.preventDefault()
-                    const name = pack.trim().replace(/\/+$/, '').split('/').pop() || ''
-                    const r = await act.run(() => api.get<{ emojis: Array<{ id: string; emoji: string }> }>(`emoji-pack/${encodeURIComponent(name)}`))
-                    if (r && r !== true) setItems((r as any).emojis)
-                }}
-            >
-                <Input dir="ltr" value={pack} onChange={(e) => setPack(e.target.value)} placeholder="t.me/addemoji/…" />
-                <Button type="submit" variant="outline" disabled={!pack.trim() || act.busy}>
-                    {act.busy ? <Spinner /> : 'نمایش پک'}
-                </Button>
-            </form>
-            <ErrorBox error={act.error} />
-            {items && (
-                <div className="grid max-h-56 grid-cols-6 gap-1.5 overflow-y-auto rounded-lg bg-muted/30 p-2">
-                    {items.map((it) => (
-                        <button
-                            key={it.id}
-                            title={it.emoji}
-                            onClick={() => onChange(it.id)}
-                            className={cn('flex aspect-square items-center justify-center rounded-lg bg-card text-xl hover:ring-2 hover:ring-primary', value === it.id && 'ring-2 ring-primary')}
-                        >
-                            <PremiumEmoji api={api} botKey={botKey} id={it.id} fallback={it.emoji} className="h-7 w-7" />
-                        </button>
-                    ))}
-                </div>
+            {!inPacks && (
+                <p className="rounded-lg bg-destructive/10 p-2 text-xs text-destructive">این آیکون در پک‌های مجاز نیست و در ربات نمایش داده نمی‌شود.</p>
             )}
-            <p className="text-[11px] text-muted-foreground leading-5">
-                لینک پک را از تلگرام کپی کنید (روی یک ایموجی پریمیوم بزنید ← «Add» ← اشتراک لینک). یا در ربات، منوی مدیریت ← «🆔 شناسه ایموجی
-                پریمیوم» را بزنید و ایموجی را بفرستید.
-            </p>
+            {packs.loading && !packs.data ? (
+                <Loading />
+            ) : !list.length ? (
+                <p className="rounded-lg bg-muted/40 p-2 text-xs text-muted-foreground">
+                    هنوز پک ایموجی‌ای برای ربات‌ها تعریف نشده است.{' '}
+                    {getUserRole() === 'superadmin' ? 'از بخش «پک‌های ایموجی پریمیوم» بالای همین صفحه اضافه کنید.' : 'از پشتیبانی بخواهید برایتان اضافه کنند.'}
+                </p>
+            ) : (
+                <>
+                    {list.length > 1 && (
+                        <div className="flex gap-1 overflow-x-auto pb-1">
+                            {list.map((p, i) => (
+                                <button
+                                    key={p.name}
+                                    onClick={() => setTab(i)}
+                                    className={cn(
+                                        'shrink-0 rounded-lg px-3 py-1 text-xs',
+                                        pack?.name === p.name ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                                    )}
+                                >
+                                    {p.title}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {pack && (
+                        <div className="grid max-h-56 grid-cols-6 gap-1.5 overflow-y-auto rounded-lg bg-muted/30 p-2">
+                            {pack.emojis.map((it) => (
+                                <button
+                                    key={it.id}
+                                    title={it.emoji}
+                                    onClick={() => onChange(it.id)}
+                                    className={cn(
+                                        'flex aspect-square items-center justify-center rounded-lg bg-card text-xl hover:ring-2 hover:ring-primary',
+                                        value === it.id && 'ring-2 ring-primary'
+                                    )}
+                                >
+                                    <PremiumEmoji api={api} botKey={botKey} id={it.id} fallback={it.emoji} className="h-7 w-7" />
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
+            <ErrorBox error={packs.error} />
         </div>
     )
 }

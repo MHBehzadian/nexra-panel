@@ -83,6 +83,31 @@ export const botsAPI = {
     },
 
     apkFetch: async (): Promise<ApkInfo> => unwrap(await api.post<ResponseModel<ApkInfo>>('/sales-bots/autopay-app/fetch')),
+
+    packs: async (): Promise<EmojiPacks> => unwrap(await api.get<ResponseModel<EmojiPacks>>('/sales-bots/emoji-packs')),
+    addPack: async (link: string): Promise<{ packs: EmojiPack[]; pushed: PushResult[] }> =>
+        unwrap(await api.post<ResponseModel<{ packs: EmojiPack[]; pushed: PushResult[] }>>('/sales-bots/emoji-packs', { link })),
+    removePack: async (name: string): Promise<{ packs: EmojiPack[]; pushed: PushResult[] }> =>
+        unwrap(await api.delete<ResponseModel<{ packs: EmojiPack[]; pushed: PushResult[] }>>(`/sales-bots/emoji-packs/${encodeURIComponent(name)}`)),
+    syncPacks: async (): Promise<{ pushed: PushResult[] }> =>
+        unwrap(await api.post<ResponseModel<{ pushed: PushResult[] }>>('/sales-bots/emoji-packs/sync')),
+}
+
+export interface EmojiPack {
+    name: string
+    title: string
+    emojis: Array<{ id: string; emoji: string }>
+}
+
+export interface EmojiPacks {
+    configured: boolean
+    packs: EmojiPack[]
+}
+
+export interface PushResult {
+    bot: string
+    ok: boolean
+    error: string | null
 }
 
 // One bot's management API, through the panel.
@@ -285,6 +310,7 @@ export interface BotPaySettings {
 }
 
 export interface BotAutopay {
+    mode: 'off' | 'no_review' | 'sms'
     enabled: boolean
     last_seen: string
     device: string
