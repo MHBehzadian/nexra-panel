@@ -232,14 +232,39 @@ async def delete_bot(bot_id: int, db: Session = Depends(get_db), user: dict = De
     return ResponseModel(success=True, message="Bot disconnected")
 
 
-async def _guess_owner(db: Session, probe) -> tuple[Admins | None, str]:
+SHARED_IDS_PATH = os.path.join(DATA_DIR, "shared-admin-ids.json")
+
+
+def _load_shared_ids() -> set[str]:
+    """Telegram ids that are admin on every bot (the panel owner's own), as
+    install.sh found them; they say nothing about who runs a bot."""
+    try:
+        with open(SHARED_IDS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return set()
+    return {str(i) for i in data.get("ids", [])} if isinstance(data, dict) else set()
+
+
+def _save_shared_ids(ids: set[str]) -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = SHARED_IDS_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"ids": sorted(ids)}, f)
+    os.replace(tmp, SHARED_IDS_PATH)
+
+
+async def _guess_owner(db: Session, probe, ignore: set[str] | None = None) -> tuple[Admins | None, str]:
     """Which panel admin runs this bot.
 
     1. The bot sells from a Nexra Panel with some reseller's credentials: the
        panel admin with that username is the owner.
-    2. Otherwise the panel admin whose Telegram id is the bot's main admin (or
-       one of its admins) — when that points at a single person.
+    2. Otherwise the panel admin whose Telegram id is one of the bot's admins
+       (its main admin or the admin list), leaving out the ids in `ignore`
+       (the panel owner's, which is admin on every bot) — when exactly one
+       panel admin matches.
     """
+    ignore = ignore or set()
     admins = crud.get_all_admins(db)
     by_name = {a.username.lower(): a for a in admins}
     code, panels = await _bot_call(probe, "GET", "panels")
@@ -254,12 +279,18 @@ async def _guess_owner(db: Session, probe) -> tuple[Admins | None, str]:
     main = str((info.get("data") or {}).get("admin_id") or "") if code == 200 else ""
     code, adm = await _bot_call(probe, "GET", "admins")
     ids = [main] + [str(x) for x in ((adm.get("data") or {}).get("admins") or [])] if code == 200 else [main]
-    for tid in [i for i in ids if i.isdigit()]:
-        matches = [a for a in admins if a.telegram_id and str(a.telegram_id) == tid]
-        if len(matches) == 1:
-            return matches[0], f"its admin's Telegram id {tid} belongs to {matches[0].username}"
-        if len(matches) > 1:
-            return None, f"Telegram id {tid} belongs to several admins: " + ", ".join(a.username for a in matches)
+    ids = [i.strip() for i in ids if i.strip().isdigit() and i.strip() not in ignore]
+    matched: dict[int, tuple[Admins, str]] = {}
+    for tid in ids:
+        for a in admins:
+            if a.telegram_id and str(a.telegram_id) == tid and a.id not in matched:
+                matched[a.id] = (a, tid)
+    if len(matched) == 1:
+        a, tid = next(iter(matched.values()))
+        return a, f"its admin's Telegram id {tid} belongs to {a.username}"
+    if len(matched) > 1:
+        return None, "its admins' Telegram ids belong to several panel admins: " + ", ".join(
+            f"{a.username} ({tid})" for a, tid in matched.values())
     return None, "no panel admin matches its Nexra reseller or its admins' Telegram ids"
 
 
@@ -275,7 +306,12 @@ async def register_bot(body: dict, db: Session = Depends(get_db), user: dict = D
     if err:
         return _fail(400, err)
     probe = type("Probe", (), {"url": url, "owner_key": owner_key, "name": url})()
-    owner, reason = await _guess_owner(db, probe)
+    shared = _load_shared_ids()
+    given = {str(i).strip() for i in (body.get("ignore_ids") or []) if str(i).strip().isdigit()}
+    if not given <= shared:
+        shared |= given
+        _save_shared_ids(shared)
+    owner, reason = await _guess_owner(db, probe, shared)
     existing = next((b for b in crud.get_all_bots(db) if b.url == url), None)
     if existing:
         values = dict(owner_key=owner_key, manager_key=manager_key, bot_username=info.get("bot_username"))
