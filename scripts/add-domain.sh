@@ -81,6 +81,25 @@ else
         fi
     fi
 
+    # While the domain still points straight at this server (before it is
+    # moved behind the tunnel), port 80 reaches nginx and HTTP validation works.
+    my_ip=$(curl -4 -fsS --max-time 8 https://api.ipify.org || true)
+    dns_ip=$(getent ahostsv4 "$NEW" | awk 'NR==1{print $1}' || true)
+    if [ "$issued" = 0 ] && [ -n "$my_ip" ] && [ "$dns_ip" = "$my_ip" ]; then
+        say "$NEW points at this server ($my_ip), issuing over HTTP"
+        python3 -c 'import certbot_nginx' 2>/dev/null \
+            || { apt-get update -qq && apt-get install -y -qq certbot python3-certbot-nginx >/dev/null; }
+        if certbot certonly --nginx -d "$NEW" --cert-name "$NEW" \
+            --non-interactive --agree-tos --register-unsafely-without-email; then
+            ln -sf "/etc/letsencrypt/live/$NEW/fullchain.pem" "$FULLCHAIN"
+            ln -sf "/etc/letsencrypt/live/$NEW/privkey.pem" "$KEY"
+            issued=1
+            warn "Once $NEW is behind the tunnel this certificate cannot renew over HTTP: run this script again before $(date -d '+85 days' +%F) with the domain pointed back at $my_ip"
+        else
+            warn "HTTP validation failed, falling back to the manual DNS record"
+        fi
+    fi
+
     if [ "$issued" = 0 ]; then
         command -v certbot >/dev/null || { apt-get update -qq && apt-get install -y -qq certbot >/dev/null; }
         echo
