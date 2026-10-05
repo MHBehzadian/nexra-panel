@@ -9,8 +9,8 @@
 #
 # The certificate is issued over DNS, not HTTP, because a domain that sits
 # behind a TCP tunnel usually has no port 80 reaching this server. With an
-# ArvanCloud API key it is fully automatic and renews itself; without one,
-# certbot shows a TXT record to add by hand.
+# ArvanCloud API key in ARVAN_API_KEY it is fully automatic and renews itself;
+# without it (the default) certbot shows a TXT record to add by hand.
 set -euo pipefail
 
 NEW="${1:-}"
@@ -55,13 +55,9 @@ mkdir -p "$CERT_DIR"
 if [ -s "$FULLCHAIN" ] && openssl x509 -checkend 2592000 -noout -in "$FULLCHAIN" >/dev/null 2>&1; then
     say "Certificate for $NEW already valid, keeping it"
 else
+    # Set ARVAN_API_KEY for a fully automatic, self-renewing certificate;
+    # without it the TXT record is added by hand.
     key="${ARVAN_API_KEY:-}"
-    if [ -z "$key" ]; then
-        echo
-        echo "ArvanCloud API key (panel.arvancloud.ir > Profile > Machine User / API keys)."
-        read -rp "Paste it, or press Enter to add the DNS record by hand: " key </dev/tty
-    fi
-
     issued=0
     if [ -n "$key" ]; then
         case "$key" in Apikey*) ;; *) key="Apikey $key" ;; esac
