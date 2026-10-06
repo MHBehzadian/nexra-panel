@@ -1,19 +1,19 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, forwardRef, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Smile } from 'lucide-react'
 import { BotAPI } from '@/lib/bots-api'
 import { getUserRole } from '@/lib/auth'
 import { cn } from '@/lib/utils'
-import { Textarea, TextareaProps } from '@/components/ui/textarea'
+import { TextareaProps } from '@/components/ui/textarea'
 import { ErrorBox, Loading, useLoad } from './common'
-import { PremiumEmoji } from './emoji'
+import { PremiumEmoji, previewURL } from './emoji'
 import { loadPacks } from './ButtonsTab'
 
 // A text box for a bot message with the allowed premium emoji packs next to
-// it: picking an emoji puts <tg-emoji emoji-id="…">…</tg-emoji> at the cursor
-// (the bot sends its texts as Telegram HTML), and a preview shows the result.
+// it: a picked emoji goes in at the cursor and shows as itself; the text is
+// kept as Telegram HTML with <tg-emoji emoji-id="…">…</tg-emoji>, which is
+// how the bot sends it.
 
 const TG_EMOJI = /<tg-emoji emoji-id="(\d+)">([\s\S]*?)<\/tg-emoji>/g
-const HAS_EMOJI = /<tg-emoji emoji-id="\d+">/
 
 type Props = Omit<TextareaProps, 'value' | 'onChange'> & {
     api: BotAPI
@@ -67,55 +67,30 @@ export function EmojiBoard({ api, children }: { api: BotAPI; children: React.Rea
     )
 }
 
-export function EmojiTextarea({ api, value, onChange, className, name, ...rest }: Props) {
-    const ref = useRef<HTMLTextAreaElement>(null)
+export function EmojiTextarea({ api, value, onChange, className, name, rows = 3, placeholder }: Props) {
     const board = useContext(BoardContext)
     const botKey = String(api.id)
-    // the board keeps the insert function; read the latest text through refs
-    const latest = useRef({ value, onChange })
-    useEffect(() => {
-        latest.current = { value, onChange }
-    })
-
-    const insert: Insert = (id, fallback) => {
-        const el = ref.current
-        const { value: v, onChange: set } = latest.current
-        const tag = `<tg-emoji emoji-id="${id}">${fallback || '⭐'}</tg-emoji>`
-        const start = el?.selectionStart ?? v.length
-        const end = el?.selectionEnd ?? v.length
-        set(v.slice(0, start) + tag + v.slice(end))
-        requestAnimationFrame(() => {
-            if (!el) return
-            el.focus()
-            el.setSelectionRange(start + tag.length, start + tag.length)
-        })
-    }
+    const editor = useRef<RichHandle>(null)
+    const insert: Insert = (id, fallback) => editor.current?.insertEmoji(id, fallback)
 
     const box = (
-        <Textarea
-            ref={ref}
+        <RichText
+            ref={editor}
+            api={api}
+            botKey={botKey}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onFocus={() => board?.focus(name || 'این متن', insert)}
+            onChange={onChange}
+            rows={rows}
+            placeholder={placeholder}
             className={className}
-            {...rest}
+            onFocus={() => board?.focus(name || 'این متن', insert)}
         />
     )
-    const preview = HAS_EMOJI.test(value) && <Preview api={api} botKey={botKey} text={value} />
-    if (board)
-        return (
-            <div className="space-y-2">
-                {box}
-                {preview}
-            </div>
-        )
+    if (board) return box
     // on its own: the packs stay open right beside the box
     return (
         <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
-            <div className="min-w-0 space-y-2">
-                {box}
-                {preview}
-            </div>
+            <div className="min-w-0">{box}</div>
             <div className="space-y-1.5">
                 <b className="flex items-center gap-1.5 text-xs">
                     <Smile className="h-3.5 w-3.5 text-amber-500" /> ایموجی پریمیوم
@@ -125,6 +100,196 @@ export function EmojiTextarea({ api, value, onChange, className, name, ...rest }
         </div>
     )
 }
+
+// ---------------------------------------------------------------- the editor
+
+// The text is edited with its premium emoji shown as the emoji themselves.
+// Everything else stays plain text (Telegram HTML such as <b> is shown as
+// typed); each emoji is an inline, non-editable chip that is written back as
+// <tg-emoji emoji-id="…">fallback</tg-emoji>, so the stored text is the same
+// as before.
+
+type RichHandle = { insertEmoji: (id: string, fallback: string) => void }
+
+const EMOJI_ATTR = 'data-emoji-id'
+
+function escapeAttr(s: string) {
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+}
+
+function emojiChip(api: BotAPI, botKey: string, id: string, fallback: string): HTMLElement {
+    const chip = document.createElement('span')
+    chip.setAttribute(EMOJI_ATTR, id)
+    chip.dataset.fallback = fallback
+    chip.contentEditable = 'false'
+    chip.className = 'inline-block align-[-0.2em] mx-px'
+    chip.textContent = fallback
+    previewURL(api, botKey, id).then((url) => {
+        if (!url) return
+        const img = document.createElement('img')
+        img.src = url
+        img.alt = fallback
+        img.draggable = false
+        img.className = 'inline-block h-[1.25em] w-[1.25em] object-contain'
+        img.onerror = () => {
+            chip.textContent = fallback
+        }
+        chip.replaceChildren(img)
+    })
+    return chip
+}
+
+// the end marker keeps a trailing line break visible; it is not part of the text
+function endMarker() {
+    const br = document.createElement('br')
+    br.dataset.end = '1'
+    return br
+}
+
+function render(el: HTMLElement, api: BotAPI, botKey: string, text: string) {
+    const nodes: Node[] = []
+    let last = 0
+    for (const m of text.matchAll(TG_EMOJI)) {
+        if ((m.index ?? 0) > last) nodes.push(document.createTextNode(text.slice(last, m.index)))
+        nodes.push(emojiChip(api, botKey, m[1], m[2]))
+        last = (m.index ?? 0) + m[0].length
+    }
+    if (last < text.length) nodes.push(document.createTextNode(text.slice(last)))
+    el.replaceChildren(...nodes, endMarker())
+}
+
+function serialize(el: Node): string {
+    let out = ''
+    el.childNodes.forEach((n) => {
+        if (n.nodeType === Node.TEXT_NODE) {
+            out += (n.textContent || '').replace(/\u200b/g, '')
+            return
+        }
+        if (!(n instanceof HTMLElement)) return
+        const id = n.getAttribute(EMOJI_ATTR)
+        if (id) {
+            out += `<tg-emoji emoji-id="${escapeAttr(id)}">${n.dataset.fallback || '⭐'}</tg-emoji>`
+        } else if (n.tagName === 'BR') {
+            if (!n.dataset.end) out += '\n'
+        } else {
+            // a line the browser wrapped in its own element
+            if (n.tagName === 'DIV' || n.tagName === 'P') out += '\n'
+            out += serialize(n)
+        }
+    })
+    return out
+}
+
+const RichText = forwardRef<
+    RichHandle,
+    {
+        api: BotAPI
+        botKey: string
+        value: string
+        onChange: (v: string) => void
+        rows: number
+        placeholder?: string
+        className?: string
+        onFocus: () => void
+    }
+>(function RichText({ api, botKey, value, onChange, rows, placeholder, className, onFocus }, ref) {
+    const el = useRef<HTMLDivElement>(null)
+    const emitted = useRef<string | null>(null)
+    const range = useRef<Range | null>(null)
+
+    // rebuild only when the text changed from outside (load, reset, save)
+    useEffect(() => {
+        if (el.current && value !== emitted.current) {
+            render(el.current, api, botKey, value)
+            emitted.current = value
+        }
+    }, [value, api, botKey])
+
+    const emit = () => {
+        if (!el.current) return
+        const last = el.current.lastChild
+        if (!(last instanceof HTMLElement && last.dataset.end)) el.current.appendChild(endMarker())
+        const v = serialize(el.current)
+        emitted.current = v
+        onChange(v)
+    }
+
+    const keepRange = () => {
+        const sel = window.getSelection()
+        if (sel && sel.rangeCount && el.current?.contains(sel.anchorNode)) range.current = sel.getRangeAt(0).cloneRange()
+    }
+
+    // put a node where the caret is (or at the end) and move the caret after it
+    const place = (node: Node) => {
+        const box = el.current
+        if (!box) return
+        let r = range.current
+        if (!r || !box.contains(r.startContainer)) {
+            r = document.createRange()
+            const end = box.lastChild
+            if (end) r.setStartBefore(end)
+            else r.setStart(box, 0)
+            r.collapse(true)
+        }
+        r.deleteContents()
+        r.insertNode(node)
+        r.setStartAfter(node)
+        r.collapse(true)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(r)
+        range.current = r.cloneRange()
+        emit()
+    }
+
+    useImperativeHandle(ref, () => ({
+        insertEmoji: (id, fallback) => {
+            el.current?.focus()
+            place(emojiChip(api, botKey, id, fallback || '⭐'))
+        },
+    }))
+
+    return (
+        <div className="relative">
+            {!value && placeholder && <span className="pointer-events-none absolute right-3 top-2 text-sm leading-7 text-muted-foreground">{placeholder}</span>}
+            <div
+                ref={el}
+                role="textbox"
+                aria-multiline="true"
+                contentEditable
+                suppressContentEditableWarning
+                aria-placeholder={placeholder}
+                onInput={emit}
+                onFocus={() => {
+                    keepRange()
+                    onFocus()
+                }}
+                onKeyUp={keepRange}
+                onMouseUp={keepRange}
+                onBlur={keepRange}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault()
+                        keepRange()
+                        place(document.createTextNode('\n'))
+                    }
+                }}
+                onPaste={(e) => {
+                    e.preventDefault()
+                    keepRange()
+                    place(document.createTextNode(e.clipboardData.getData('text/plain')))
+                }}
+                onDrop={(e) => e.preventDefault()}
+                style={{ minHeight: `${rows * 1.75 + 1.25}rem` }}
+                className={cn(
+                    'w-full whitespace-pre-wrap break-words rounded-md border border-input bg-background px-3 py-2 text-sm leading-7 outline-none',
+                    'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background',
+                    className
+                )}
+            />
+        </div>
+    )
+})
 
 function Palette({ api, botKey, onPick, disabled }: { api: BotAPI; botKey: string; onPick: Insert; disabled?: boolean }) {
     const packs = useLoad(() => loadPacks(), [])
@@ -175,27 +340,6 @@ function Palette({ api, botKey, onPick, disabled }: { api: BotAPI; botKey: strin
             )}
             <p className="text-[11px] text-muted-foreground">روی هر ایموجی بزنید تا همان‌جای مکان‌نما در متن قرار بگیرد.</p>
             <ErrorBox error={packs.error} />
-        </div>
-    )
-}
-
-function Preview({ api, botKey, text }: { api: BotAPI; botKey: string; text: string }) {
-    const parts: Array<string | { id: string; fallback: string }> = []
-    let last = 0
-    for (const m of text.matchAll(TG_EMOJI)) {
-        parts.push(text.slice(last, m.index))
-        parts.push({ id: m[1], fallback: m[2] })
-        last = (m.index ?? 0) + m[0].length
-    }
-    parts.push(text.slice(last))
-    return (
-        <div className="space-y-1 rounded-xl bg-muted/30 p-3">
-            <span className="text-[11px] text-muted-foreground">پیش‌نمایش</span>
-            <div className="whitespace-pre-wrap text-sm leading-7">
-                {parts.map((p, i) =>
-                    typeof p === 'string' ? <span key={i}>{p}</span> : <PremiumEmoji key={i} api={api} botKey={botKey} id={p.id} fallback={p.fallback} />
-                )}
-            </div>
         </div>
     )
 }
