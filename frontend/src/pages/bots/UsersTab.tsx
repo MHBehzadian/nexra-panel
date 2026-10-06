@@ -4,10 +4,10 @@ import { BotAPI, BotService, BotUser, Paged } from '@/lib/bots-api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Empty, ErrorBox, Field, Loading, Notice, money, num, selectClass, useAction, useLoad, when } from './common'
+import { EmojiTextarea } from './EmojiTextarea'
 
 const PAGE = 30
 const onlyDigits = (v: string) => v.replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[^\d]/g, '')
@@ -190,7 +190,7 @@ function UserDialog({ api, id, onClose, onChanged }: { api: BotAPI; id: string |
                             <div className="font-medium flex items-center gap-2">
                                 <Send className="h-4 w-4" /> پیام به کاربر
                             </div>
-                            <Textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} />
+                            <EmojiTextarea api={api} rows={3} value={text} onChange={setText} />
                             <Button
                                 disabled={act.busy || !text.trim()}
                                 onClick={async () => {

@@ -3,9 +3,9 @@ import { Megaphone, Trash2, UserPlus, BookOpen, Plus, Edit2 } from 'lucide-react
 import { BotAPI, BotHelp } from '@/lib/bots-api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, ErrorBox, Field, Notice, Spinner, num, useAction, useLoad } from './common'
+import { EmojiTextarea } from './EmojiTextarea'
 
 export function MessagesTab({ api }: { api: BotAPI }) {
     return (
@@ -48,7 +48,7 @@ function BroadcastCard({ api }: { api: BotAPI }) {
                         </Button>
                     </div>
                 )}
-                <Textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="متن پیام (HTML تلگرام مجاز است)" />
+                <EmojiTextarea api={api} rows={5} value={text} onChange={setText} placeholder="متن پیام (HTML تلگرام مجاز است)" />
                 <ErrorBox error={act.error || status.error} />
                 <Notice text={act.notice} />
                 <Button
@@ -180,7 +180,7 @@ function HelpCard({ api }: { api: BotAPI }) {
                         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="اندروید" />
                     </Field>
                     <Field label="متن">
-                        <Textarea rows={4} value={desc} onChange={(e) => setDesc(e.target.value)} />
+                        <EmojiTextarea api={api} rows={4} value={desc} onChange={setDesc} />
                     </Field>
                     <ErrorBox error={act.error || list.error} />
                     <div className="flex gap-2">

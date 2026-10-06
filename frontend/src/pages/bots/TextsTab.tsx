@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { BotAPI, BotText } from '@/lib/bots-api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ErrorBox, Field, Loading, Notice, Spinner, useAction, useLoad } from './common'
+import { EmojiTextarea } from './EmojiTextarea'
 
 export function TextsTab({ api }: { api: BotAPI }) {
     const remote = useLoad(() => api.get<BotText[]>('texts'), [api])
@@ -24,9 +24,8 @@ export function TextsTab({ api }: { api: BotAPI }) {
             <CardHeader>
                 <CardTitle>متن‌های ربات</CardTitle>
                 <CardDescription className="leading-6">
-                    متن پیام‌ها و برچسب دکمه‌ها. HTML تلگرام (مثل &lt;b&gt; و &lt;code&gt;) پشتیبانی می‌شود. ایموجی پریمیوم به شکل{' '}
-                    <code dir="ltr">&lt;tg-emoji emoji-id="شناسه"&gt;😀&lt;/tg-emoji&gt;</code> نوشته می‌شود؛ اگر متن را در خود ربات با ایموجی پریمیوم
-                    بفرستید، ربات همین را خودکار می‌سازد.
+                    متن پیام‌ها و برچسب دکمه‌ها. HTML تلگرام (مثل &lt;b&gt; برای متن پررنگ) پشتیبانی می‌شود. برای ایموجی پریمیوم، زیر هر متن روی «ایموجی
+                    پریمیوم» بزنید و ایموجی را انتخاب کنید؛ همان‌جای مکان‌نما در متن قرار می‌گیرد. برای رنگ و آیکون دکمه‌ها به بخش «دکمه‌ها» بروید.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -35,7 +34,7 @@ export function TextsTab({ api }: { api: BotAPI }) {
                         {t.button ? (
                             <Input value={value(t)} onChange={(e) => setValue(t.id, e.target.value)} />
                         ) : (
-                            <Textarea rows={4} value={value(t)} onChange={(e) => setValue(t.id, e.target.value)} />
+                            <EmojiTextarea api={api} rows={4} value={value(t)} onChange={(v) => setValue(t.id, v)} />
                         )}
                     </Field>
                 ))}

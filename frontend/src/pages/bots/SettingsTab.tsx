@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { BotAffiliates, BotAPI, BotSettings } from '@/lib/bots-api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ErrorBox, Field, Loading, Notice, Spinner, Switch, useAction, useLoad } from './common'
+import { EmojiTextarea } from './EmojiTextarea'
 
 const FLAGS: Array<[keyof BotSettings, string, string?]> = [
     ['Bot_Status', 'ربات روشن است', 'خاموش که باشد، فقط ادمین‌ها می‌توانند از ربات استفاده کنند.'],
@@ -154,7 +154,7 @@ function AffiliatesForm({ api, orig, onSaved }: { api: BotAPI; orig: BotAffiliat
                     </Field>
                 </div>
                 <Field label="توضیح بخش زیرمجموعه">
-                    <Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                    <EmojiTextarea api={api} rows={3} value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
                 </Field>
                 <ErrorBox error={act.error} />
                 <Notice text={act.notice} />

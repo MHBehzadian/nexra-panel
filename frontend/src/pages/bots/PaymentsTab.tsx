@@ -4,10 +4,10 @@ import { BotAPI, BotPayment, BotPaySettings, Paged } from '@/lib/bots-api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Empty, ErrorBox, Field, Loading, Notice, Spinner, Switch, money, selectClass, useAction, useLoad } from './common'
+import { EmojiTextarea } from './EmojiTextarea'
 
 const METHODS: Record<string, string> = {
     'cart to cart': 'کارت به کارت',
@@ -182,7 +182,7 @@ export function PaymentsTab({ api }: { api: BotAPI }) {
                         <DialogTitle>رد پرداخت {rejecting && money(rejecting.price)}</DialogTitle>
                     </DialogHeader>
                     <Field label="دلیل (برای کاربر فرستاده می‌شود)">
-                        <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="رسید نامعتبر است" />
+                        <EmojiTextarea api={api} value={reason} onChange={setReason} placeholder="رسید نامعتبر است" />
                     </Field>
                     <div className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => setRejecting(null)}>
@@ -234,7 +234,7 @@ function PaySettingsForm({ api, orig, onSaved }: { api: BotAPI; orig: BotPaySett
                     <Switch checked={en('aqayepardakht')} onChange={(v) => setEn('aqayepardakht', v)} label="آقای پرداخت" />
                 </div>
                 <Field label="متن کارت به کارت" hint="شماره کارت و نام صاحب حساب؛ همین متن به مشتری نشان داده می‌شود.">
-                    <Textarea rows={4} value={form.card_text} onChange={(e) => setForm({ ...form, card_text: e.target.value })} />
+                    <EmojiTextarea api={api} rows={4} value={form.card_text} onChange={(v) => setForm({ ...form, card_text: v })} />
                 </Field>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <Field label="کلید API نوپیمنتس">

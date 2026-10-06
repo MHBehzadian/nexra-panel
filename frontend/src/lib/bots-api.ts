@@ -118,6 +118,7 @@ export interface PushResult {
 export function botAPI(botId: number) {
     const base = `/sales-bots/${botId}/api`
     return {
+        id: botId,
         get: async <T = any>(path: string, params?: Record<string, any>): Promise<T> =>
             unwrap(await api.get<ResponseModel<T>>(`${base}/${path}`, { params })),
         post: async <T = any>(path: string, body: any = {}): Promise<T> =>
