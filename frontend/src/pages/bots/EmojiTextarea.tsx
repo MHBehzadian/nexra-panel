@@ -197,6 +197,16 @@ const RichText = forwardRef<
     const emitted = useRef<string | null>(null)
     const range = useRef<Range | null>(null)
 
+    // remember the caret however it moves (mouse, keys, touch)
+    useEffect(() => {
+        const track = () => {
+            const sel = window.getSelection()
+            if (sel && sel.rangeCount && el.current?.contains(sel.anchorNode)) range.current = sel.getRangeAt(0).cloneRange()
+        }
+        document.addEventListener('selectionchange', track)
+        return () => document.removeEventListener('selectionchange', track)
+    }, [])
+
     // rebuild only when the text changed from outside (load, reset, save)
     useEffect(() => {
         if (el.current && value !== emitted.current) {
@@ -244,7 +254,10 @@ const RichText = forwardRef<
 
     useImperativeHandle(ref, () => ({
         insertEmoji: (id, fallback) => {
+            // focusing puts the caret at the start; keep where it was
+            const saved = range.current
             el.current?.focus()
+            range.current = saved
             place(emojiChip(api, botKey, id, fallback || '⭐'))
         },
     }))
@@ -260,10 +273,7 @@ const RichText = forwardRef<
                 suppressContentEditableWarning
                 aria-placeholder={placeholder}
                 onInput={emit}
-                onFocus={() => {
-                    keepRange()
-                    onFocus()
-                }}
+                onFocus={onFocus}
                 onKeyUp={keepRange}
                 onMouseUp={keepRange}
                 onBlur={keepRange}
@@ -330,6 +340,7 @@ function Palette({ api, botKey, onPick, disabled }: { api: BotAPI; botKey: strin
                             type="button"
                             key={e.id}
                             title={e.emoji}
+                            onMouseDown={(ev) => ev.preventDefault()}
                             onClick={() => onPick(e.id, e.emoji)}
                             className="flex aspect-square items-center justify-center rounded-lg bg-muted/30 text-xl hover:ring-2 hover:ring-primary"
                         >
