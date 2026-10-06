@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ErrorBox, Field, Loading, Notice, Spinner, useAction, useLoad } from './common'
-import { EmojiTextarea } from './EmojiTextarea'
+import { EmojiBoard, EmojiTextarea } from './EmojiTextarea'
 
 export function TextsTab({ api }: { api: BotAPI }) {
     const remote = useLoad(() => api.get<BotText[]>('texts'), [api])
@@ -24,20 +24,24 @@ export function TextsTab({ api }: { api: BotAPI }) {
             <CardHeader>
                 <CardTitle>متن‌های ربات</CardTitle>
                 <CardDescription className="leading-6">
-                    متن پیام‌ها و برچسب دکمه‌ها. HTML تلگرام (مثل &lt;b&gt; برای متن پررنگ) پشتیبانی می‌شود. برای ایموجی پریمیوم، زیر هر متن روی «ایموجی
-                    پریمیوم» بزنید و ایموجی را انتخاب کنید؛ همان‌جای مکان‌نما در متن قرار می‌گیرد. برای رنگ و آیکون دکمه‌ها به بخش «دکمه‌ها» بروید.
+                    متن پیام‌ها و برچسب دکمه‌ها. HTML تلگرام (مثل &lt;b&gt; برای متن پررنگ) پشتیبانی می‌شود. برای ایموجی پریمیوم، روی یک متن بزنید و از پنل
+                    «ایموجی پریمیوم» کنار متن‌ها ایموجی را انتخاب کنید؛ همان‌جای مکان‌نما در متن قرار می‌گیرد. برای رنگ و آیکون دکمه‌ها به بخش «دکمه‌ها» بروید.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                {remote.data.map((t) => (
-                    <Field key={t.id} label={t.label} hint={t.button ? 'برچسب دکمه — کاربران با /start بعدی دکمه‌ی جدید را می‌گیرند.' : undefined}>
-                        {t.button ? (
-                            <Input value={value(t)} onChange={(e) => setValue(t.id, e.target.value)} />
-                        ) : (
-                            <EmojiTextarea api={api} rows={4} value={value(t)} onChange={(v) => setValue(t.id, v)} />
-                        )}
-                    </Field>
-                ))}
+                <EmojiBoard api={api}>
+                    <div className="space-y-4">
+                        {remote.data.map((t) => (
+                            <Field key={t.id} label={t.label} hint={t.button ? 'برچسب دکمه — کاربران با /start بعدی دکمه‌ی جدید را می‌گیرند.' : undefined}>
+                                {t.button ? (
+                                    <Input value={value(t)} onChange={(e) => setValue(t.id, e.target.value)} />
+                                ) : (
+                                    <EmojiTextarea api={api} name={t.label} rows={4} value={value(t)} onChange={(v) => setValue(t.id, v)} />
+                                )}
+                            </Field>
+                        ))}
+                    </div>
+                </EmojiBoard>
                 <ErrorBox error={act.error} />
                 <Notice text={act.notice} />
                 <div className="sticky bottom-2 flex gap-2 rounded-xl bg-card/90 backdrop-blur p-2 border border-border">

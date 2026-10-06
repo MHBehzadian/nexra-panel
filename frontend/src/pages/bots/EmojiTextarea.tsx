@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { ChevronDown, Smile } from 'lucide-react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { Smile } from 'lucide-react'
 import { BotAPI } from '@/lib/bots-api'
 import { getUserRole } from '@/lib/auth'
 import { cn } from '@/lib/utils'
@@ -19,19 +19,71 @@ type Props = Omit<TextareaProps, 'value' | 'onChange'> & {
     api: BotAPI
     value: string
     onChange: (v: string) => void
+    /** shown on the shared emoji panel while this box is the target */
+    name?: string
 }
 
-export function EmojiTextarea({ api, value, onChange, className, ...rest }: Props) {
-    const ref = useRef<HTMLTextAreaElement>(null)
-    const [open, setOpen] = useState(false)
-    const botKey = String(api.id)
+type Insert = (id: string, fallback: string) => void
+type Board = { focus: (name: string, insert: Insert) => void }
+const BoardContext = createContext<Board | null>(null)
 
-    const insert = (id: string, fallback: string) => {
+// EmojiBoard puts one emoji panel beside a page of text boxes (sticky on wide
+// screens): a pick goes into the box that was clicked last.
+export function EmojiBoard({ api, children }: { api: BotAPI; children: React.ReactNode }) {
+    const target = useRef<Insert | null>(null)
+    const [name, setName] = useState('')
+    const board = useMemo<Board>(
+        () => ({
+            focus: (n, insert) => {
+                target.current = insert
+                setName(n)
+            },
+        }),
+        []
+    )
+    return (
+        <BoardContext.Provider value={board}>
+            <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+                <div className="min-w-0">{children}</div>
+                <aside className="order-first lg:order-none">
+                    <div className="space-y-2 lg:sticky lg:top-4">
+                        <b className="flex items-center gap-1.5 text-sm">
+                            <Smile className="h-4 w-4 text-amber-500" /> ایموجی پریمیوم
+                        </b>
+                        <p className="text-xs text-muted-foreground">
+                            {name ? (
+                                <>
+                                    درج در: <b className="text-foreground">{name}</b>
+                                </>
+                            ) : (
+                                'اول روی یک متن بزنید، بعد ایموجی را انتخاب کنید.'
+                            )}
+                        </p>
+                        <Palette api={api} botKey={String(api.id)} onPick={(id, f) => target.current?.(id, f)} disabled={!name} />
+                    </div>
+                </aside>
+            </div>
+        </BoardContext.Provider>
+    )
+}
+
+export function EmojiTextarea({ api, value, onChange, className, name, ...rest }: Props) {
+    const ref = useRef<HTMLTextAreaElement>(null)
+    const board = useContext(BoardContext)
+    const botKey = String(api.id)
+    // the board keeps the insert function; read the latest text through refs
+    const latest = useRef({ value, onChange })
+    useEffect(() => {
+        latest.current = { value, onChange }
+    })
+
+    const insert: Insert = (id, fallback) => {
         const el = ref.current
+        const { value: v, onChange: set } = latest.current
         const tag = `<tg-emoji emoji-id="${id}">${fallback || '⭐'}</tg-emoji>`
-        const start = el?.selectionStart ?? value.length
-        const end = el?.selectionEnd ?? value.length
-        onChange(value.slice(0, start) + tag + value.slice(end))
+        const start = el?.selectionStart ?? v.length
+        const end = el?.selectionEnd ?? v.length
+        set(v.slice(0, start) + tag + v.slice(end))
         requestAnimationFrame(() => {
             if (!el) return
             el.focus()
@@ -39,27 +91,42 @@ export function EmojiTextarea({ api, value, onChange, className, ...rest }: Prop
         })
     }
 
+    const box = (
+        <Textarea
+            ref={ref}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => board?.focus(name || 'این متن', insert)}
+            className={className}
+            {...rest}
+        />
+    )
+    const preview = HAS_EMOJI.test(value) && <Preview api={api} botKey={botKey} text={value} />
+    if (board)
+        return (
+            <div className="space-y-2">
+                {box}
+                {preview}
+            </div>
+        )
+    // on its own: the packs stay open right beside the box
     return (
-        <div className="space-y-2">
-            <Textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} className={className} {...rest} />
-            <button
-                type="button"
-                onClick={() => setOpen((o) => !o)}
-                className={cn(
-                    'flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition',
-                    open ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-accent'
-                )}
-            >
-                <Smile className="h-3.5 w-3.5" /> ایموجی پریمیوم
-                <ChevronDown className={cn('h-3.5 w-3.5 transition', open && 'rotate-180')} />
-            </button>
-            {open && <Palette api={api} botKey={botKey} onPick={insert} />}
-            {HAS_EMOJI.test(value) && <Preview api={api} botKey={botKey} text={value} />}
+        <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
+            <div className="min-w-0 space-y-2">
+                {box}
+                {preview}
+            </div>
+            <div className="space-y-1.5">
+                <b className="flex items-center gap-1.5 text-xs">
+                    <Smile className="h-3.5 w-3.5 text-amber-500" /> ایموجی پریمیوم
+                </b>
+                <Palette api={api} botKey={botKey} onPick={insert} />
+            </div>
         </div>
     )
 }
 
-function Palette({ api, botKey, onPick }: { api: BotAPI; botKey: string; onPick: (id: string, fallback: string) => void }) {
+function Palette({ api, botKey, onPick, disabled }: { api: BotAPI; botKey: string; onPick: Insert; disabled?: boolean }) {
     const packs = useLoad(() => loadPacks(), [])
     const [tab, setTab] = useState(0)
     const list = packs.data?.packs || []
@@ -92,7 +159,7 @@ function Palette({ api, botKey, onPick }: { api: BotAPI; botKey: string; onPick:
                 </div>
             )}
             {pack && (
-                <div className="grid max-h-48 grid-cols-8 gap-1 overflow-y-auto sm:grid-cols-12">
+                <div className={cn('grid max-h-64 grid-cols-7 gap-1 overflow-y-auto', disabled && 'pointer-events-none opacity-50')}>
                     {pack.emojis.map((e) => (
                         <button
                             type="button"
