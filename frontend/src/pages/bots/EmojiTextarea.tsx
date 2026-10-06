@@ -23,9 +23,14 @@ type Props = Omit<TextareaProps, 'value' | 'onChange'> & {
     name?: string
 }
 
-type Insert = (id: string, fallback: string) => void
-type Board = { focus: (name: string, insert: Insert) => void }
+export type Insert = (id: string, fallback: string) => void
+type Board = { focus: (name: string, insert: Insert | null) => void }
 const BoardContext = createContext<Board | null>(null)
+
+// for other fields on the same page (button labels take the emoji as their icon)
+export function useEmojiBoard() {
+    return useContext(BoardContext)
+}
 
 // EmojiBoard puts one emoji panel beside a page of text boxes (sticky on wide
 // screens): a pick goes into the box that was clicked last.
@@ -36,7 +41,7 @@ export function EmojiBoard({ api, children }: { api: BotAPI; children: React.Rea
         () => ({
             focus: (n, insert) => {
                 target.current = insert
-                setName(n)
+                setName(insert ? n : '')
             },
         }),
         []
