@@ -315,9 +315,12 @@ async def register_bot(body: dict, db: Session = Depends(get_db), user: dict = D
     existing = next((b for b in crud.get_all_bots(db) if b.url == url), None)
     if existing:
         values = dict(owner_key=owner_key, manager_key=manager_key, bot_username=info.get("bot_username"))
-        # an assignment made by hand is kept
+        # an admin it already has (given by hand or earlier) is kept
         if existing.admin_id is None and owner:
             values["admin_id"] = owner.id
+        elif existing.admin_id is not None:
+            had = next((a for a in crud.get_all_admins(db) if a.id == existing.admin_id), None)
+            reason = f"kept the admin it already had ({had.username if had else existing.admin_id})"
         bot = crud.update_bot(db, existing, **values)
         created = False
     else:
