@@ -109,6 +109,47 @@ class APIService:
         ).json()
         return user
 
+    async def find_user(self, username: str) -> dict | None:
+        """One user, or None when Marzban says there is no such user for these
+        credentials (404, or 403 for a non-sudo admin asking about someone
+        else's user). Raises when Marzban couldn't be asked, so a network
+        failure is never mistaken for a deleted user."""
+        await self._login()
+        response = self.session.get(
+            f"{self.url}api/user/{username}",
+            headers=self.headers,
+            timeout=self._request_timeout,
+        )
+        if response.status_code in (403, 404):
+            return None
+        response.raise_for_status()
+        return response.json()
+
+    async def list_users(self, admin: str | None = None, page_size: int = 500) -> list[dict]:
+        """Every user these credentials can see, read page by page. `admin`
+        asks Marzban to keep only that admin's users; the caller still checks
+        each user's admin, since older versions ignore the filter. Raises if
+        any page fails, so a partial list is never returned."""
+        await self._login()
+        users: list[dict] = []
+        offset = 0
+        while True:
+            params = {"offset": offset, "limit": page_size}
+            if admin:
+                params["admin"] = admin
+            response = self.session.get(
+                f"{self.url}api/users",
+                headers=self.headers,
+                params=params,
+                timeout=60,
+            )
+            response.raise_for_status()
+            page = response.json().get("users", [])
+            users.extend(page)
+            if len(page) < page_size:
+                return users
+            offset += page_size
+
     async def get_inbounds(self) -> dict:
         await self._login()
         url = f"{self.url}api/inbounds"

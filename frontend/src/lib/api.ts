@@ -128,10 +128,12 @@ export const adminAPI = {
         return response.data.data!
     },
 
-    updateAdmin: async (adminId: number, data: AdminFormData): Promise<AdminOutput> => {
+    updateAdmin: async (adminId: number, data: AdminFormData & { traffic_before?: number }): Promise<AdminOutput> => {
         const submitData = {
             ...data,
             traffic: gbToBytes(data.traffic),
+            // Converted the same way as traffic, so an untouched field is a zero change.
+            traffic_before: data.traffic_before === undefined ? undefined : gbToBytes(data.traffic_before),
         }
 
         const response = await api.put<ResponseModel<AdminOutput>>(

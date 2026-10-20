@@ -1,6 +1,6 @@
 from datetime import datetime
 from .engin import Base
-from sqlalchemy import Column, DateTime, Integer, String, Boolean, BigInteger, Float, ForeignKey
+from sqlalchemy import Column, DateTime, Integer, String, Boolean, BigInteger, Float, ForeignKey, UniqueConstraint
 
 
 class Admins(Base):
@@ -22,6 +22,10 @@ class Admins(Base):
     inbound_flow = Column(String, nullable=True)
     # Not unique: one person can own several reseller panels (see c7b1d4e88a25).
     telegram_id = Column(BigInteger, nullable=True, index=True)
+    # When the Marzban ledger first took in this admin's users (see
+    # services/marzban/sync.py). Null means the next sync adopts whatever is
+    # on Marzban as already paid for, without charging.
+    marzban_synced_at = Column(DateTime, nullable=True)
 
 
 class Panels(Base):
@@ -51,6 +55,26 @@ class SanaeiUsers(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     owner = Column(String, nullable=False)
+
+class MarzbanUsers(Base):
+    """What Nexra last saw of one Marzban user and has charged its owner for.
+
+    Marzban users can be created and edited outside Nexra (in Marzban itself,
+    or by a sales bot logged in as the admin), so the admin's traffic is kept
+    by comparing Marzban against this ledger rather than by counting only the
+    changes made through Nexra.
+    """
+
+    __tablename__ = "marzban_users"
+    __table_args__ = (UniqueConstraint("owner", "username"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    # The Nexra admin's username (the same name the user has on Marzban as its admin).
+    owner = Column(String, nullable=False, index=True)
+    username = Column(String, nullable=False)
+    data_limit = Column(BigInteger, default=0, nullable=False)
+    used_traffic = Column(BigInteger, default=0, nullable=False)
+
 
 class GuardUsers(Base):
     __tablename__ = "guard_users"

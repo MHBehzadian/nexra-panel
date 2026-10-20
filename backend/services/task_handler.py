@@ -7,6 +7,7 @@ from .sanaei import AdminTaskService as SanaeiAdminTaskService
 from .guard import AdminTaskService as GuardAdminTaskService
 from .tx_ui import AdminTaskService as TxUIAdminTaskService
 from .marzban import AdminTaskService as MarzbanAdminTaskService
+from .marzban import sync as marzban_ledger
 from backend.schema.output import ResponseModel, ClientsOutput
 from backend.schema._input import PanelInput, ClientInput, ClientUpdateInput
 from backend.services.sanaei import APIService as sanaei_APIService
@@ -526,6 +527,11 @@ async def add_new_user(
                 },
             )
 
+        # Charging goes through the ledger (services/marzban/sync.py), which
+        # also covers users made in Marzban itself: settle the name first, so
+        # a stale entry for an earlier user of that name is refunded, then
+        # charge for what Marzban actually created.
+        await marzban_ledger.refresh(db, admin_username, admin_task.api_service, user_input.email, before_change=True)
         success = await admin_task.add_user_to_panel(user_input)
 
         if not success:
@@ -536,7 +542,7 @@ async def add_new_user(
                     "message": "Failed to create the user on the panel. Check the username and panel connection.",
                 },
             )
-        admin_check.reduce_usage(user_input.total, user_input.total)
+        await marzban_ledger.refresh(db, admin_username, admin_task.api_service, user_input.email)
         return ResponseModel(
             success=True,
             message="User added successfully",
@@ -793,6 +799,9 @@ async def update_a_user(
                 f"Reactivating {user_input.email} on update: was {previous_status}"
             )
 
+        # The ledger charges the change (AdminLimiter.apply_update) once
+        # Marzban has it; see services/marzban/sync.py.
+        await marzban_ledger.refresh(db, admin_username, admin_task.api_service, user_input.email, before_change=True)
         update_user = await admin_task.update_user_in_panel(
             user_input.email, user_input
         )
@@ -806,7 +815,7 @@ async def update_a_user(
                 },
             )
 
-        admin_check.apply_update(old_total, new_total, used)
+        await marzban_ledger.refresh(db, admin_username, admin_task.api_service, user_input.email)
         return ResponseModel(
             success=True,
             message="User updated successfully",
@@ -1033,6 +1042,8 @@ async def reset_a_user_usage(
                     "message": f"Insufficient traffic to reset usage for this user, your limit: {round((_admin.traffic) / (1024 ** 3), 1)} GB",
                 },
             )
+        # The ledger charges what the reset frees once Marzban has done it.
+        await marzban_ledger.refresh(db, admin_username, admin_task.api_service, email, before_change=True)
         reset_usage = await admin_task.reset_user_usage_in_panel(email)
 
         if not reset_usage:
@@ -1043,7 +1054,7 @@ async def reset_a_user_usage(
                     "message": "Failed to reset user usage",
                 },
             )
-        admin_check.charge(freed)
+        await marzban_ledger.refresh(db, admin_username, admin_task.api_service, email)
         return ResponseModel(
             success=True,
             message="User usage reset successfully",
@@ -1268,6 +1279,8 @@ async def delete_a_user(admin_username: str, uuid: str, db: Session) -> bool:
 
         traffic = max(user_info.get("data_limit", 0) - user_info.get("used_traffic", 0), 0)
 
+        # The ledger refunds what was left unused once Marzban has deleted it.
+        await marzban_ledger.refresh(db, admin_username, admin_task.api_service, username, before_change=True)
         delete_user = await admin_task.delete_user_from_panel(username)
 
         if not delete_user:
@@ -1280,7 +1293,7 @@ async def delete_a_user(admin_username: str, uuid: str, db: Session) -> bool:
                 },
             )
 
-        admin_check.increase_usage(traffic)
+        await marzban_ledger.refresh(db, admin_username, admin_task.api_service, username)
         logger.info(
             f"User {user_info['username']} deleted by admin {admin_username}, traffic returned: {round(traffic / (1024 ** 3), 2)} GB"
         )
