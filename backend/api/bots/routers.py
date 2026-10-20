@@ -18,6 +18,7 @@ import os
 import re
 import tempfile
 from datetime import datetime
+from types import SimpleNamespace
 
 import httpx
 from fastapi import APIRouter, Depends, File, Request, UploadFile, status
@@ -32,6 +33,7 @@ from backend.schema._input import TelegramBotInput, TelegramBotUpdateInput
 from backend.schema.output import ResponseModel, TelegramBotOutput
 from backend.utils.logger import logger
 from backend.utils.settings_store import DATA_DIR
+from backend.api.topup_bot.routers import load_connection as load_topup_connection, key_for as topup_key
 
 router = APIRouter(prefix="/sales-bots", tags=["Sales bots"])
 
@@ -398,6 +400,15 @@ async def _bot_call(bot: TelegramBots, method: str, path: str, body: dict | None
         return 502, {"ok": False, "error": f"Bot is unreachable: {e.__class__.__name__}"}
 
 
+def _topup_bot():
+    """The top-up bot, shaped like a sales bot connection for _bot_call, or None.
+    It speaks the same emoji API, so packs can be read and pushed through it too."""
+    conn = load_topup_connection()
+    if not conn.get("url"):
+        return None
+    return SimpleNamespace(name="Top-up bot", url=conn["url"], owner_key=topup_key(conn))
+
+
 async def _push_emoji_allow(db: Session, only: TelegramBots | None = None) -> list[dict]:
     """Send the allowed emoji ids to every bot (or one). Returns per-bot results."""
     packs = _load_packs()
@@ -405,7 +416,8 @@ async def _push_emoji_allow(db: Session, only: TelegramBots | None = None) -> li
         return []
     ids = sorted({e["id"] for p in packs for e in p.get("emojis", [])})
     results = []
-    for bot in [only] if only else crud.get_all_bots(db):
+    targets = [only] if only else crud.get_all_bots(db) + [b for b in [_topup_bot()] if b]
+    for bot in targets:
         code, body = await _bot_call(bot, "PUT", "emoji-allow", {"ids": ids})
         results.append({"bot": bot.name, "ok": code == 200, "error": None if code == 200 else body.get("error")})
         if code != 200:
@@ -435,7 +447,7 @@ async def add_pack(body: dict, db: Session = Depends(get_db), user: dict = Depen
         if not PACK_NAME.match(name):
             return _fail(400, "لینک پک (t.me/addemoji/…)، نام پک یا شناسه‌ی ایموجی‌ها را بگذارید")
         names = [name]
-    bots = [b for b in crud.get_all_bots(db) if b.is_active] or crud.get_all_bots(db)
+    bots = [b for b in crud.get_all_bots(db) if b.is_active] or crud.get_all_bots(db) or [b for b in [_topup_bot()] if b]
     if not bots:
         return _fail(400, "Connect a bot first; packs are read through a bot")
     via = bots[0]

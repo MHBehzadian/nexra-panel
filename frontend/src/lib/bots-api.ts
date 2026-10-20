@@ -116,9 +116,13 @@ export interface PushResult {
 
 // One bot's management API, through the panel.
 export function botAPI(botId: number) {
-    const base = `/sales-bots/${botId}/api`
+    return managementAPI(`/sales-bots/${botId}/api`, botId)
+}
+
+// `id` keys the emoji preview cache, so every bot needs its own.
+function managementAPI(base: string, id: number | string) {
     return {
-        id: botId,
+        id,
         get: async <T = any>(path: string, params?: Record<string, any>): Promise<T> =>
             unwrap(await api.get<ResponseModel<T>>(`${base}/${path}`, { params })),
         post: async <T = any>(path: string, body: any = {}): Promise<T> =>
@@ -345,4 +349,66 @@ export interface BotAffiliates {
     start_gift_amount: string
     description: string
     has_banner: boolean
+}
+
+// ---------------------------------------------------------------- the top-up bot
+
+export const topupBotAPI = managementAPI('/topup-bot/api', 'topup')
+
+export interface TopupConnection {
+    url: string
+    own_key?: boolean
+    connected: boolean
+    error?: string | null
+    bot_username?: string | null
+    bot_name?: string | null
+}
+
+export const topupConnectionAPI = {
+    get: async (): Promise<TopupConnection> => unwrap(await api.get<ResponseModel<TopupConnection>>('/topup-bot/connection')),
+    set: async (url: string, key: string): Promise<TopupConnection> =>
+        unwrap(await api.put<ResponseModel<TopupConnection>>('/topup-bot/connection', { url, key })),
+}
+
+export interface TopupStats {
+    users: number
+    linked_users: number
+    pending_requests: number
+    pending_amount: number
+    open_bills: number
+    open_bills_amount: number
+    overdue_bills: number
+    overdue_amount: number
+    locked_panels: number
+    sales_today: number
+    sales_today_amount: number
+    sales_today_gb: number
+}
+
+export interface TopupSettings {
+    price_per_gb: number | null
+    card_number: string
+    force_join_enabled: boolean
+    force_join_channel: string
+    auto_approve_enabled: boolean
+    has_bulk_pin: boolean
+    min_gb: number
+    max_gb: number
+}
+
+export interface TopupText {
+    id: string
+    text: string
+    default: string
+    changed: boolean
+    button: boolean
+    plain: boolean
+    fields: string[]
+}
+
+export interface TopupButtons {
+    buttons: Record<string, { style: string; emoji: string }>
+    labels: Record<string, string>
+    defaults: Record<string, string>
+    styles: string[]
 }
