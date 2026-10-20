@@ -29,6 +29,10 @@ class AdminUpdateInput(BaseModel):
     marzban_inbounds: Optional[str] = None
     marzban_password: Optional[str] = None
     traffic: float
+    # The traffic the edit form showed when it opened. When sent, only the
+    # difference the superadmin typed is applied, so charges made while the
+    # form was open (e.g. by the Marzban sync) aren't overwritten.
+    traffic_before: Optional[float] = None
     update_return_traffic: bool = False
     delete_return_traffic: bool = False
     expiry_date: datetime | None

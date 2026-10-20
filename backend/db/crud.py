@@ -2,7 +2,7 @@ from datetime import datetime
 from secrets import token_hex
 from sqlalchemy.orm import Session
 
-from backend.db.model import Admins, Panels, News, SanaeiUsers, Servers, TelegramBots
+from backend.db.model import Admins, Panels, News, SanaeiUsers, Servers, TelegramBots, MarzbanUsers
 from backend.schema._input import AdminInput, AdminUpdateInput, PanelInput
 from backend.auth.hash import hash_password
 
@@ -83,6 +83,10 @@ def update_admin_values(
         else admin.hashed_password
     )
     if admin:
+        if admin.panel != admin_input.panel:
+            # The ledger describes the users on the old panel; left in place,
+            # the next sync would see them all as deleted and refund them.
+            forget_marzban_ledger(db, admin)
         admin.username = admin_input.username
         admin.hashed_password = new_password
         admin.is_active = admin_input.is_active
@@ -91,8 +95,11 @@ def update_admin_values(
         admin.inbound_flow = admin_input.flow
         admin.marzban_inbounds = admin_input.marzban_inbounds
         admin.marzban_password = admin_input.marzban_password
-        admin.traffic = admin_input.traffic
-        admin.initial_traffic = admin_input.traffic
+        if admin_input.traffic_before is None:
+            admin.traffic = admin_input.traffic
+        else:
+            admin.traffic = Admins.traffic + int(admin_input.traffic - admin_input.traffic_before)
+        admin.initial_traffic = admin.traffic
         admin.update_return_traffic = admin_input.update_return_traffic
         admin.delete_return_traffic = admin_input.delete_return_traffic
         admin.expiry_date = admin_input.expiry_date
@@ -108,19 +115,25 @@ def remove_admin(db: Session, admin_id: int) -> bool:
         # SQLite doesn't enforce the FK's ON DELETE here; unassign by hand so
         # the bot stays (superadmin-only) instead of pointing at a dead id.
         db.query(TelegramBots).filter(TelegramBots.admin_id == admin_id).update({TelegramBots.admin_id: None})
+        db.query(MarzbanUsers).filter(MarzbanUsers.owner == admin.username).delete()
         db.delete(admin)
         db.commit()
         return True
     return False
 
 
+# Traffic is changed in SQL (traffic = traffic - x), not as a Python
+# read-modify-write: the Marzban sync and the request handlers each hold their
+# own session, and a stale copy of the row would otherwise overwrite the other's
+# charge. The balance may go below zero: users made outside Nexra (in Marzban or
+# by a sales bot) are charged whether or not the admin had the traffic left.
 def reduce_admin_traffic(db: Session, admin: Admins, used_traffic) -> None:
-    admin.traffic -= used_traffic
+    admin.traffic = Admins.traffic - used_traffic
     db.commit()
 
 
 def increase_admin_traffic(db: Session, admin: Admins, added_traffic) -> None:
-    admin.traffic += added_traffic
+    admin.traffic = Admins.traffic + added_traffic
     db.commit()
 
 
@@ -132,8 +145,8 @@ def grant_admin_traffic(db: Session, admin: Admins, added_traffic) -> None:
     also raises initial_traffic, since the admin's total granted quota actually
     went up and the panel's Remaining/Initial display should reflect that.
     """
-    admin.traffic += added_traffic
-    admin.initial_traffic += added_traffic
+    admin.traffic = Admins.traffic + added_traffic
+    admin.initial_traffic = Admins.initial_traffic + added_traffic
     db.commit()
 
 
@@ -178,6 +191,10 @@ def add_panel(db: Session, panel_input: PanelInput) -> None:
 def update_panel_values(db: Session, panel_id: int, panel_input: PanelInput) -> bool:
     panel = db.query(Panels).filter(Panels.id == panel_id).first()
     if panel:
+        if panel.url != panel_input.url:
+            # Possibly a different Marzban altogether: start its admins' ledgers over.
+            for admin in db.query(Admins).filter(Admins.panel == panel.name):
+                forget_marzban_ledger(db, admin)
         panel.panel_type = panel_input.panel_type
         panel.name = panel_input.name
         panel.url = panel_input.url
@@ -337,6 +354,29 @@ def get_user_from_sanaei_table(db: Session, username: str) -> SanaeiUsers | None
 
 def get_all_users_from_sanaei_table(db: Session) -> list[SanaeiUsers] | None:
     return db.query(SanaeiUsers).all()
+
+# ---------------------------------------------------------------- marzban ledger
+
+
+def get_marzban_ledger(db: Session, owner: str) -> dict[str, MarzbanUsers]:
+    rows = db.query(MarzbanUsers).filter(MarzbanUsers.owner == owner)
+    return {row.username: row for row in rows}
+
+
+def get_marzban_ledger_row(db: Session, owner: str, username: str) -> MarzbanUsers | None:
+    return (
+        db.query(MarzbanUsers)
+        .filter(MarzbanUsers.owner == owner, MarzbanUsers.username == username)
+        .first()
+    )
+
+
+def forget_marzban_ledger(db: Session, admin: Admins) -> None:
+    """Drop an admin's ledger so the next sync adopts their users afresh,
+    without charging or refunding anything. Commits with the caller."""
+    db.query(MarzbanUsers).filter(MarzbanUsers.owner == admin.username).delete()
+    admin.marzban_synced_at = None
+
 
 def add_user_in_guard_table(db: Session, username: str, owner: str) -> None:
     user = SanaeiUsers(username=username, owner=owner)

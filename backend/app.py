@@ -52,3 +52,8 @@ async def _start_background_tasks():
     from backend.services.backup_scheduler import backup_scheduler
 
     asyncio.create_task(backup_scheduler())
+
+    # Charge admins for Marzban users made or changed outside Nexra
+    from backend.services.marzban.sync import marzban_sync_loop
+
+    asyncio.create_task(marzban_sync_loop())
