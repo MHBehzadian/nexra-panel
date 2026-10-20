@@ -13,8 +13,8 @@ class AdminInput(BaseModel):
     marzban_inbounds: Optional[str] = None
     marzban_password: Optional[str] = None
     traffic: float = 0.0
-    update_return_traffic: bool = False
-    delete_return_traffic: bool = False
+    update_return_traffic: bool = True
+    delete_return_traffic: bool = True
     expiry_date: datetime | None
     telegram_id: Optional[int] = None
 

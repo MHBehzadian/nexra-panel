@@ -79,11 +79,11 @@ export const adminSchema = z.object({
 
     update_return_traffic: z
         .boolean()
-        .default(false),
+        .default(true),
 
     delete_return_traffic: z
         .boolean()
-        .default(false),
+        .default(true),
 
     is_active: z
         .boolean()
