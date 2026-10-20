@@ -24,7 +24,19 @@ def create_access_token(data: dict):
     return encoded_jwt
 
 
-def get_current_admin(token: str = Depends(oauth2_scheme)):
+# Why a locked admin can't get in, keyed by the reason the bot locked them for.
+# English like every other API message; the frontend translates them.
+SUSPENDED_MESSAGES = {
+    "unpaid": "Your panel is suspended because the weekly invoice was not paid. Pay it in the bot to restore access.",
+}
+SUSPENDED_DEFAULT_MESSAGE = "Your panel has been suspended. Contact support."
+
+
+def suspended_message(reason: str) -> str:
+    return SUSPENDED_MESSAGES.get(reason, SUSPENDED_DEFAULT_MESSAGE)
+
+
+def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
         content={"success": False, "message": "Could not validate credentials"},
@@ -34,6 +46,17 @@ def get_current_admin(token: str = Depends(oauth2_scheme)):
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
+
+        # A lock changes the password, which does nothing to a session that is
+        # already open — so it is checked here too, and a 401 sends the panel
+        # back to the login page, where the reason is shown.
+        if payload.get("role") == "admin":
+            admin = crud.get_admin_by_username(db, username)
+            if admin and admin.suspended_reason:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=suspended_message(admin.suspended_reason),
+                )
 
         return {
             "username": username,
@@ -93,6 +116,14 @@ async def login_for_access_token(
 
     # Check for regular admin credentials
     admin = crud.get_admin_by_username(db, form_data.username)
+    # Checked before the password: the lock replaced it, so the admin is typing
+    # the old one, and "incorrect password" would leave them guessing why.
+    if admin and admin.suspended_reason:
+        logger.warning(f"Login refused for suspended admin: {admin.username}")
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"success": False, "message": suspended_message(admin.suspended_reason)},
+        )
     if not admin or not verify_password(form_data.password, admin.hashed_password):
         logger.warning(f"Failed login attempt for username: {form_data.username}")
         return JSONResponse(

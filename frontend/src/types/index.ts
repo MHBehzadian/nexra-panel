@@ -125,6 +125,8 @@ export interface AdminOutput {
     delete_return_traffic: boolean | false
     expiry_date: string | null
     telegram_id?: number | null
+    // Set while the top-up bot has the panel locked ("unpaid" or "manual").
+    suspended_reason?: string | null
 }
 
 // Panel Form
