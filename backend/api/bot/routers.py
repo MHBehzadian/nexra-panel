@@ -310,8 +310,10 @@ async def create_admin(
         marzban_inbounds=json.dumps(inbounds),
         marzban_password=payload.password,
         traffic=int(payload.traffic_gb * 1024**3),
-        update_return_traffic=False,
-        delete_return_traffic=False,
+        # Lowering a user's limit or deleting the user gives the unused traffic
+        # back, as resellers expect.
+        update_return_traffic=True,
+        delete_return_traffic=True,
         expiry_date=expiry_date,
         telegram_id=payload.telegram_id,
     )
