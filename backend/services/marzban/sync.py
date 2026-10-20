@@ -14,9 +14,12 @@ the same rules the Nexra handlers always used:
 The handlers settle the user they touch right before and after changing it
 (refresh), and a background loop (marzban_sync_loop) settles everything else.
 Reading every user is heavy for Marzban (it builds each user's links), so the
-loop does that once per panel every MARZBAN_FULL_SYNC_INTERVAL, and in between
-reads only the newest users every MARZBAN_SYNC_INTERVAL: new sales are charged
-within about a minute, edits, resets and deletions within the full interval.
+loop does that once per panel every MARZBAN_FULL_SYNC_INTERVAL. In between,
+every MARZBAN_SYNC_INTERVAL, it reads only the newest users, which charges new
+sales within about a minute; the same request reports how many users the
+admins have in all, and when that no longer matches the ledger (a deletion,
+mostly) a full read runs right away. Edits and resets of older users wait for
+the next full read.
 Charges outside Nexra are made even when the admin has no traffic left, so the
 balance can go negative.
 
@@ -41,6 +44,8 @@ from backend.utils.logger import logger
 GB = 1024**3
 # How many of the newest users the quick check reads per panel.
 NEWEST_PAGE = 100
+# Least time between two full reads of a panel that the quick check asks for.
+FULL_SYNC_MIN_GAP = 120
 
 # Counts the handlers' ledger writes per admin. The sync reads Marzban off the
 # event loop, and a handler that settles a user meanwhile makes that read
@@ -149,34 +154,37 @@ async def _confirm_gone(
     return gone
 
 
+async def _read_newest(
+    panel_url: str, panel_username: str, panel_password: str, owners: list[str]
+) -> tuple[dict[str, dict[str, dict]], int | None]:
+    """The quick check: the newest users of these owners, by owner, and how
+    many users the owners have in all (None if Marzban can't be trusted to
+    have filtered by owner). One small request either way."""
+    api = APIService(panel_url, panel_username, panel_password)
+    users, total = await api.list_newest_users(NEWEST_PAGE, admins=owners)
+    if any("admin" not in user for user in users):
+        return {}, None  # No owner on the users; the full sync reads per admin.
+    by_owner: dict[str, dict[str, dict]] = {owner: {} for owner in owners}
+    filtered = True
+    for user in users:
+        if _owner(user) in by_owner and user.get("username"):
+            by_owner[_owner(user)][user["username"]] = user
+        else:
+            filtered = False  # Marzban ignored the owner filter; total is everyone's.
+    return by_owner, total if filtered else None
+
+
 async def _read_panel(
     panel_url: str,
     panel_username: str,
     panel_password: str,
     owners: dict[str, str | None],
     known: dict[str, set[str]],
-    newest_only: bool,
 ) -> dict[str, tuple[dict[str, dict], set[str]]]:
-    """Each owner's users on one Marzban: {owner: (users by name, gone)}.
-
-    newest_only reads a single page of the most recently created users, which
-    is all it takes to catch new sales; it can't tell what was deleted, so
-    `gone` is empty. Otherwise every user of these owners is read, in one
-    listing for the whole panel. An owner missing from the result couldn't be
-    read and is left alone this time.
-    """
+    """Every user of these owners on one Marzban, in one listing for the whole
+    panel: {owner: (users by name, ledger users that are gone)}. An owner
+    missing from the result couldn't be read and is left alone this time."""
     api = APIService(panel_url, panel_username, panel_password)
-
-    if newest_only:
-        users = await api.list_newest_users(NEWEST_PAGE)
-        if any("admin" not in user for user in users):
-            return {}  # No owner on the users; the full sync reads per admin.
-        result = {owner: ({}, set()) for owner in owners}
-        for user in users:
-            if _owner(user) in result and user.get("username"):
-                result[_owner(user)][0][user["username"]] = user
-        return result
-
     users = await api.list_users(admins=list(owners))
     result = {}
     if any("admin" not in user for user in users):
@@ -246,12 +254,16 @@ def _apply(panel_name: str, owner: str, found: dict[str, dict], gone: set[str], 
         db.close()
 
 
-async def sync_panel(panel_name: str, full: bool) -> None:
+async def sync_panel(panel_name: str, full: bool) -> bool:
+    """Read one panel and settle what changed. A full read settles everything;
+    a quick one settles the newest users and returns True when the owners'
+    user count on Marzban no longer matches the ledger, which means something
+    beyond them changed (usually a deletion) and a full read is due."""
     db = sessionLocal()
     try:
         panel = crud.get_panel_by_name(db, panel_name)
         if not panel or panel.panel_type != "marzban" or not panel.is_active:
-            return
+            return False
         admins = [a for a in crud.get_all_admins(db) if a.panel == panel_name]
         if not full:
             admins = [a for a in admins if a.marzban_synced_at is not None]
@@ -261,16 +273,23 @@ async def sync_panel(panel_name: str, full: bool) -> None:
     finally:
         db.close()
     if not owners:
-        return
+        return False
 
     writes = {o: _writes.get(o, 0) for o in owners}
+    total = None
     try:
-        result = await asyncio.to_thread(
-            lambda: asyncio.run(_read_panel(*connection, owners, known, newest_only=not full))
-        )
+        if full:
+            result = await asyncio.to_thread(
+                lambda: asyncio.run(_read_panel(*connection, owners, known))
+            )
+        else:
+            newest, total = await asyncio.to_thread(
+                lambda: asyncio.run(_read_newest(*connection, list(owners)))
+            )
+            result = {owner: (found, set()) for owner, found in newest.items()}
     except Exception as exc:
         logger.warning(f"Marzban sync: could not read panel {panel_name}: {exc}")
-        return
+        return False
 
     for owner, (found, gone) in result.items():
         # A handler settled this admin's users while Marzban was being read,
@@ -282,15 +301,39 @@ async def sync_panel(panel_name: str, full: bool) -> None:
         except Exception as exc:
             logger.error(f"Marzban sync failed for {owner}: {exc}")
 
+    if total is None:
+        return False
+    db = sessionLocal()
+    try:
+        recorded = db.query(MarzbanUsers).filter(MarzbanUsers.owner.in_(list(owners))).count()
+    finally:
+        db.close()
+    return recorded != total
 
-async def sync_all(full: bool = True) -> None:
+
+# When each panel last had a full read (time.monotonic()).
+_last_full: dict[str, float] = {}
+
+
+async def sync_all(full: bool | None = None) -> None:
+    """full=None is the schedule: a quick check, and a full read when it's
+    due or the quick check found the count off (at most every
+    FULL_SYNC_MIN_GAP seconds, so a count that never matches can't turn every
+    quick check into a full read). True or False forces one kind."""
     db = sessionLocal()
     try:
         names = [p.name for p in crud.get_all_panels(db) if p.panel_type == "marzban" and p.is_active]
     finally:
         db.close()
     for name in names:
-        await sync_panel(name, full)
+        since_full = time.monotonic() - _last_full.get(name, float("-inf"))
+        run_full = full is True or (full is None and since_full >= config.MARZBAN_FULL_SYNC_INTERVAL)
+        if not run_full:
+            count_off = await sync_panel(name, full=False)
+            run_full = full is None and count_off and since_full >= FULL_SYNC_MIN_GAP
+        if run_full:
+            _last_full[name] = time.monotonic()
+            await sync_panel(name, full=True)
 
 
 async def marzban_sync_loop():
@@ -298,14 +341,9 @@ async def marzban_sync_loop():
         return
     # Let the app finish starting before the first (and largest) read.
     await asyncio.sleep(10)
-    last_full = None
     while True:
-        started = time.monotonic()
-        full = last_full is None or started - last_full >= config.MARZBAN_FULL_SYNC_INTERVAL
         try:
-            await sync_all(full)
+            await sync_all()
         except Exception as exc:
             logger.error(f"Marzban sync error: {exc}")
-        if full:
-            last_full = started
         await asyncio.sleep(config.MARZBAN_SYNC_INTERVAL)

@@ -150,17 +150,19 @@ class APIService:
                 return users
             offset += page_size
 
-    async def list_newest_users(self, limit: int) -> list[dict]:
-        """The most recently created users, newest first. Raises on failure."""
+    async def list_newest_users(self, limit: int, admins: list[str]) -> tuple[list[dict], int | None]:
+        """The most recently created users of these admins, newest first, and
+        how many users Marzban counts for them in all. Raises on failure."""
         await self._login()
         response = self.session.get(
             f"{self.url}api/users",
             headers=self.headers,
-            params={"offset": 0, "limit": limit, "sort": "-created_at"},
+            params={"offset": 0, "limit": limit, "sort": "-created_at", "admin": admins},
             timeout=self._request_timeout,
         )
         response.raise_for_status()
-        return response.json().get("users", [])
+        body = response.json()
+        return body.get("users", []), body.get("total")
 
     async def get_inbounds(self) -> dict:
         await self._login()
