@@ -31,6 +31,8 @@ export function tbToBytes(tb: number): number {
  */
 export function formatTraffic(bytes: number): string {
     if (bytes === 0) return '0 B'
+    // An admin's remaining traffic can be negative (see the Marzban sync).
+    if (bytes < 0) return '-' + formatTraffic(-bytes)
 
     const units = ['B', 'KB', 'MB', 'GB', 'TB']
     const k = 1024

@@ -71,9 +71,10 @@ export const adminSchema = z.object({
         .optional()
         .nullable(),
 
+    // May be negative: users made in Marzban outside Nexra are charged even
+    // with no traffic left, and the edit form must still save such an admin.
     traffic: z
         .number()
-        .min(0, 'Traffic cannot be negative')
         .default(0),
 
     update_return_traffic: z

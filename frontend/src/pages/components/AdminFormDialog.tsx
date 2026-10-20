@@ -464,7 +464,6 @@ export function AdminFormDialog({
                             id="traffic"
                             type="number"
                             step="0.1"
-                            min="0"
                             placeholder="0"
                             disabled={isSubmitting}
                             {...register('traffic', { valueAsNumber: true })}
