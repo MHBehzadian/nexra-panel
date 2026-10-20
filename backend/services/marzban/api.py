@@ -125,9 +125,9 @@ class APIService:
         response.raise_for_status()
         return response.json()
 
-    async def list_users(self, admin: str | None = None, page_size: int = 500) -> list[dict]:
-        """Every user these credentials can see, read page by page. `admin`
-        asks Marzban to keep only that admin's users; the caller still checks
+    async def list_users(self, admins: list[str] | None = None, page_size: int = 500) -> list[dict]:
+        """Every user these credentials can see, read page by page. `admins`
+        asks Marzban to keep only those admins' users; the caller still checks
         each user's admin, since older versions ignore the filter. Raises if
         any page fails, so a partial list is never returned."""
         await self._login()
@@ -135,8 +135,8 @@ class APIService:
         offset = 0
         while True:
             params = {"offset": offset, "limit": page_size}
-            if admin:
-                params["admin"] = admin
+            if admins:
+                params["admin"] = admins
             response = self.session.get(
                 f"{self.url}api/users",
                 headers=self.headers,
@@ -149,6 +149,18 @@ class APIService:
             if len(page) < page_size:
                 return users
             offset += page_size
+
+    async def list_newest_users(self, limit: int) -> list[dict]:
+        """The most recently created users, newest first. Raises on failure."""
+        await self._login()
+        response = self.session.get(
+            f"{self.url}api/users",
+            headers=self.headers,
+            params={"offset": 0, "limit": limit, "sort": "-created_at"},
+            timeout=self._request_timeout,
+        )
+        response.raise_for_status()
+        return response.json().get("users", [])
 
     async def get_inbounds(self) -> dict:
         await self._login()
