@@ -94,7 +94,8 @@ def update_admin_values(
         admin.inbound_id = admin_input.inbound_id
         admin.inbound_flow = admin_input.flow
         admin.marzban_inbounds = admin_input.marzban_inbounds
-        admin.marzban_password = admin_input.marzban_password
+        if admin_input.marzban_password:
+            admin.marzban_password = admin_input.marzban_password
         if admin_input.traffic_before is None:
             admin.traffic = admin_input.traffic
         else:
