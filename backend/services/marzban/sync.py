@@ -13,6 +13,10 @@ the same rules the Nexra handlers always used:
 
 The handlers settle the user they touch right before and after changing it
 (refresh), and a background loop (marzban_sync_loop) settles everything else.
+Reading every user is heavy for Marzban (it builds each user's links), so the
+loop does that once per panel every MARZBAN_FULL_SYNC_INTERVAL, and in between
+reads only the newest users every MARZBAN_SYNC_INTERVAL: new sales are charged
+within about a minute, edits, resets and deletions within the full interval.
 Charges outside Nexra are made even when the admin has no traffic left, so the
 balance can go negative.
 
@@ -21,6 +25,7 @@ they were either paid for through Nexra or made before this existed.
 """
 
 import asyncio
+import time
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -34,6 +39,8 @@ from backend.services.marzban.api import APIService
 from backend.utils.logger import logger
 
 GB = 1024**3
+# How many of the newest users the quick check reads per panel.
+NEWEST_PAGE = 100
 
 # Counts the handlers' ledger writes per admin. The sync reads Marzban off the
 # event loop, and a handler that settles a user meanwhile makes that read
@@ -122,109 +129,168 @@ async def refresh(
     db.commit()
 
 
-async def _read_marzban(
-    admin_username: str,
-    admin_password: str | None,
-    panel_url: str,
-    panel_username: str,
-    panel_password: str,
-    known: set[str],
-) -> tuple[dict[str, dict], set[str]]:
-    """The admin's users on Marzban, plus which of the `known` (ledger) users
-    are really gone. Raises if Marzban can't be read in full."""
-    api = APIService(panel_url, panel_username, panel_password)
-    users = await api.list_users(admin=admin_username)
-    if any("admin" not in user for user in users):
-        # This Marzban doesn't say who owns a user, so ask as the admin.
-        api = APIService(panel_url, admin_username, admin_password or "")
-        users = await api.list_users()
-    found = {u["username"]: u for u in users if u.get("username") and _owned_by(u, admin_username)}
+def _owner(user: dict) -> str | None:
+    return (user.get("admin") or {}).get("username")
 
-    # A user missing from the list is looked up on its own before being taken
-    # as deleted: one bad or shifting page must not refund (and then re-charge)
-    # users that are still there.
+
+async def _confirm_gone(
+    api: APIService, owner: str, found: dict[str, dict], known: set[str]
+) -> set[str]:
+    """Which ledger users missing from the list are really gone. Each is looked
+    up on its own first: one bad or shifting page must not refund (and then
+    re-charge) users that are still there. Fills `found` with the rest."""
     gone = set()
     for username in known - found.keys():
         user = await api.find_user(username)
-        if user is None or not _owned_by(user, admin_username):
+        if user is None or not _owned_by(user, owner):
             gone.add(username)
         else:
             found[username] = user
-    return found, gone
+    return gone
 
 
-async def sync_admin(admin_username: str) -> None:
+async def _read_panel(
+    panel_url: str,
+    panel_username: str,
+    panel_password: str,
+    owners: dict[str, str | None],
+    known: dict[str, set[str]],
+    newest_only: bool,
+) -> dict[str, tuple[dict[str, dict], set[str]]]:
+    """Each owner's users on one Marzban: {owner: (users by name, gone)}.
+
+    newest_only reads a single page of the most recently created users, which
+    is all it takes to catch new sales; it can't tell what was deleted, so
+    `gone` is empty. Otherwise every user of these owners is read, in one
+    listing for the whole panel. An owner missing from the result couldn't be
+    read and is left alone this time.
+    """
+    api = APIService(panel_url, panel_username, panel_password)
+
+    if newest_only:
+        users = await api.list_newest_users(NEWEST_PAGE)
+        if any("admin" not in user for user in users):
+            return {}  # No owner on the users; the full sync reads per admin.
+        result = {owner: ({}, set()) for owner in owners}
+        for user in users:
+            if _owner(user) in result and user.get("username"):
+                result[_owner(user)][0][user["username"]] = user
+        return result
+
+    users = await api.list_users(admins=list(owners))
+    result = {}
+    if any("admin" not in user for user in users):
+        # This Marzban doesn't say who owns a user, so ask as each admin.
+        for owner, password in owners.items():
+            own_api = APIService(panel_url, owner, password or "")
+            try:
+                found = {u["username"]: u for u in await own_api.list_users() if u.get("username")}
+                result[owner] = (found, await _confirm_gone(own_api, owner, found, known[owner]))
+            except Exception as exc:
+                logger.warning(f"Marzban sync: could not read users of {owner}: {exc}")
+        return result
+
+    by_owner: dict[str, dict[str, dict]] = {owner: {} for owner in owners}
+    for user in users:
+        if _owner(user) in by_owner and user.get("username"):
+            by_owner[_owner(user)][user["username"]] = user
+    for owner, found in by_owner.items():
+        try:
+            result[owner] = (found, await _confirm_gone(api, owner, found, known[owner]))
+        except Exception as exc:
+            logger.warning(f"Marzban sync: could not check deleted users of {owner}: {exc}")
+    return result
+
+
+def _apply(panel_name: str, owner: str, found: dict[str, dict], gone: set[str], full: bool) -> None:
     db = sessionLocal()
     try:
-        admin = crud.get_admin_by_username(db, admin_username)
-        panel = crud.get_panel_by_name(db, admin.panel) if admin else None
-        if not panel or panel.panel_type != "marzban" or not panel.is_active:
+        admin = crud.get_admin_by_username(db, owner)
+        if admin is None or admin.panel != panel_name:
             return
-        known = set(crud.get_marzban_ledger(db, admin_username))
-        args = (admin_username, admin.marzban_password, panel.url, panel.username, panel.password, known)
-    finally:
-        db.close()
-
-    writes = _writes.get(admin_username, 0)
-    try:
-        found, gone = await asyncio.to_thread(lambda: asyncio.run(_read_marzban(*args)))
-    except Exception as exc:
-        logger.warning(f"Marzban sync: could not read users of {admin_username}: {exc}")
-        return
-    if _writes.get(admin_username, 0) != writes:
-        return
-
-    db = sessionLocal()
-    try:
-        admin = crud.get_admin_by_username(db, admin_username)
-        if admin is None:
-            return
-        ledger = crud.get_marzban_ledger(db, admin_username)
+        ledger = crud.get_marzban_ledger(db, owner)
 
         if admin.marzban_synced_at is None:
+            # Only a full read may adopt: a page of new users isn't all of them.
+            if not full:
+                return
             for username, user in found.items():
                 limit, used = _state(user)
                 row = ledger.get(username)
                 if row is None:
-                    db.add(MarzbanUsers(owner=admin_username, username=username, data_limit=limit, used_traffic=used))
+                    db.add(MarzbanUsers(owner=owner, username=username, data_limit=limit, used_traffic=used))
                 else:
                     row.data_limit, row.used_traffic = limit, used
             admin.marzban_synced_at = datetime.utcnow()
             db.commit()
-            logger.info(f"Marzban sync: adopted {len(found)} existing users of {admin_username} without charging")
+            logger.info(f"Marzban sync: adopted {len(found)} existing users of {owner} without charging")
             return
 
-        limiter = AdminLimiter(db, admin_username)
+        limiter = AdminLimiter(db, owner)
         before = admin.traffic
         for username, user in found.items():
-            settle(db, limiter, admin_username, username, user, ledger.get(username))
+            settle(db, limiter, owner, username, user, ledger.get(username))
         for username in gone:
             if username in ledger:
-                settle(db, limiter, admin_username, username, None, ledger[username])
+                settle(db, limiter, owner, username, None, ledger[username])
         db.commit()
 
         change = before - admin.traffic
         if change:
             verb = "charged" if change > 0 else "refunded"
             logger.info(
-                f"Marzban sync: {admin_username} {verb} {abs(change) / GB:.2f} GB "
+                f"Marzban sync: {owner} {verb} {abs(change) / GB:.2f} GB "
                 f"for changes made outside Nexra, remaining {admin.traffic / GB:.2f} GB"
             )
     finally:
         db.close()
 
 
-async def sync_all() -> None:
+async def sync_panel(panel_name: str, full: bool) -> None:
     db = sessionLocal()
     try:
-        usernames = [admin.username for admin in crud.get_all_admins(db)]
+        panel = crud.get_panel_by_name(db, panel_name)
+        if not panel or panel.panel_type != "marzban" or not panel.is_active:
+            return
+        admins = [a for a in crud.get_all_admins(db) if a.panel == panel_name]
+        if not full:
+            admins = [a for a in admins if a.marzban_synced_at is not None]
+        owners = {a.username: a.marzban_password for a in admins}
+        known = {o: set(crud.get_marzban_ledger(db, o)) for o in owners} if full else {}
+        connection = (panel.url, panel.username, panel.password)
     finally:
         db.close()
-    for username in usernames:
+    if not owners:
+        return
+
+    writes = {o: _writes.get(o, 0) for o in owners}
+    try:
+        result = await asyncio.to_thread(
+            lambda: asyncio.run(_read_panel(*connection, owners, known, newest_only=not full))
+        )
+    except Exception as exc:
+        logger.warning(f"Marzban sync: could not read panel {panel_name}: {exc}")
+        return
+
+    for owner, (found, gone) in result.items():
+        # A handler settled this admin's users while Marzban was being read,
+        # so the read may be stale for them; the next pass picks them up.
+        if _writes.get(owner, 0) != writes[owner]:
+            continue
         try:
-            await sync_admin(username)
+            _apply(panel_name, owner, found, gone, full)
         except Exception as exc:
-            logger.error(f"Marzban sync failed for {username}: {exc}")
+            logger.error(f"Marzban sync failed for {owner}: {exc}")
+
+
+async def sync_all(full: bool = True) -> None:
+    db = sessionLocal()
+    try:
+        names = [p.name for p in crud.get_all_panels(db) if p.panel_type == "marzban" and p.is_active]
+    finally:
+        db.close()
+    for name in names:
+        await sync_panel(name, full)
 
 
 async def marzban_sync_loop():
@@ -232,9 +298,14 @@ async def marzban_sync_loop():
         return
     # Let the app finish starting before the first (and largest) read.
     await asyncio.sleep(10)
+    last_full = None
     while True:
+        started = time.monotonic()
+        full = last_full is None or started - last_full >= config.MARZBAN_FULL_SYNC_INTERVAL
         try:
-            await sync_all()
+            await sync_all(full)
         except Exception as exc:
             logger.error(f"Marzban sync error: {exc}")
+        if full:
+            last_full = started
         await asyncio.sleep(config.MARZBAN_SYNC_INTERVAL)

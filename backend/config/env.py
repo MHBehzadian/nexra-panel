@@ -20,9 +20,12 @@ class Setting(BaseSettings):
     # startup — an unset key just means the bot endpoints stay locked (see
     # verify_bot_api_key), everything else keeps working normally.
     BOT_API_KEY: str = ""
-    # Seconds between checks of Marzban for users made or changed outside
-    # Nexra (see services/marzban/sync.py); 0 turns the check off.
+    # Seconds between quick checks of Marzban for users made outside Nexra
+    # (see services/marzban/sync.py); 0 turns the sync off altogether.
     MARZBAN_SYNC_INTERVAL: int = 60
+    # Seconds between full reads of every user, which catch edits, usage
+    # resets and deletions made outside Nexra.
+    MARZBAN_FULL_SYNC_INTERVAL: int = 600
 
     class Config:
         env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
