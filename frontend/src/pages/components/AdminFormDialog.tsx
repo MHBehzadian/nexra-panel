@@ -253,6 +253,9 @@ export function AdminFormDialog({
                     ? JSON.stringify(selectedInbounds)
                     : null,
                 marzban_password: selectedPanel?.panel_type === 'marzban' ? passwordToSend : null,
+                // What the form opened with, so the server applies only the
+                // change typed here and keeps charges made meanwhile.
+                traffic_before: admin ? bytesToGB(admin.traffic) : undefined,
             }
 
             if (!passwordToSend) {

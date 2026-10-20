@@ -95,8 +95,11 @@ def update_admin_values(
         admin.inbound_flow = admin_input.flow
         admin.marzban_inbounds = admin_input.marzban_inbounds
         admin.marzban_password = admin_input.marzban_password
-        admin.traffic = admin_input.traffic
-        admin.initial_traffic = admin_input.traffic
+        if admin_input.traffic_before is None:
+            admin.traffic = admin_input.traffic
+        else:
+            admin.traffic = Admins.traffic + int(admin_input.traffic - admin_input.traffic_before)
+        admin.initial_traffic = admin.traffic
         admin.update_return_traffic = admin_input.update_return_traffic
         admin.delete_return_traffic = admin_input.delete_return_traffic
         admin.expiry_date = admin_input.expiry_date
