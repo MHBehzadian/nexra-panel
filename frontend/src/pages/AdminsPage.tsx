@@ -330,6 +330,11 @@ function AdminDetailsRow({
                     <Badge variant={admin.is_active ? 'default' : 'destructive'}>
                         {admin.is_active ? 'Active' : 'Inactive'}
                     </Badge>
+                    {admin.suspended_reason && (
+                        <Badge className="ml-2" variant="destructive">
+                            {admin.suspended_reason === 'unpaid' ? 'Suspended · unpaid' : 'Suspended'}
+                        </Badge>
+                    )}
                 </TableCell>
                 <TableCell className="text-right space-x-2">
                     <Button size="sm" variant="ghost" onClick={onToggleStatus}>
@@ -408,6 +413,11 @@ function MobileAdminCard({
                     <Badge variant={admin.is_active ? 'default' : 'destructive'} className="text-xs">
                         {admin.is_active ? 'Active' : 'Inactive'}
                     </Badge>
+                    {admin.suspended_reason && (
+                        <Badge variant="destructive" className="text-xs">
+                            {admin.suspended_reason === 'unpaid' ? 'Suspended · unpaid' : 'Suspended'}
+                        </Badge>
+                    )}
                     <ChevronDown
                         className={cn(
                             'h-4 w-4 text-muted-foreground transition-transform',

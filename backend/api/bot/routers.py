@@ -12,6 +12,7 @@ from backend.schema._input import (
     BotChangePasswordInput,
     BotCreateAdminInput,
     BotGrantInput,
+    BotSuspensionInput,
     BotTopupInput,
 )
 from backend.db import crud
@@ -440,4 +441,29 @@ async def change_admin_marzban_password(
         success=True,
         message="Password updated successfully in Marzban and Nexra",
         data={"telegram_id": admin.telegram_id, "username": admin.username},
+    )
+
+
+@router.post(
+    "/admin/suspension",
+    description="Record (or clear) why the bot locked this admin's panel, so login can say so",
+)
+async def set_admin_suspension(
+    payload: BotSuspensionInput,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_bot_api_key),
+):
+    admin, error = _resolve_target(db, payload.telegram_id, payload.username)
+    if error:
+        return error
+
+    crud.set_suspended_reason(db, admin, payload.reason)
+    if payload.reason:
+        logger.info(f"Bot suspended admin {admin.username} ({payload.reason})")
+    else:
+        logger.info(f"Bot lifted the suspension on admin {admin.username}")
+    return ResponseModel(
+        success=True,
+        message="Suspension updated",
+        data={"username": admin.username, "reason": admin.suspended_reason},
     )

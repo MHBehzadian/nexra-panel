@@ -22,6 +22,7 @@ class AdminOutput(BaseModel):
     delete_return_traffic: bool
     expiry_date: Optional[datetime]
     telegram_id: Optional[int] = None
+    suspended_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
