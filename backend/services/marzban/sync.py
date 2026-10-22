@@ -16,7 +16,8 @@ The handlers settle the user they touch right before and after changing it
 Reading every user is heavy for Marzban (it builds each user's links), so the
 loop does that once per panel every MARZBAN_FULL_SYNC_INTERVAL, and in between
 reads only the newest users every MARZBAN_SYNC_INTERVAL: new sales are charged
-within about a minute, edits, resets and deletions within the full interval.
+within that interval, edits, resets and deletions within the full one (both six
+hours by default).
 Charges outside Nexra are made even when the admin has no traffic left, so the
 balance can go negative.
 

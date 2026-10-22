@@ -42,7 +42,10 @@ index_html_path = frontend_build_path / "index.html"
 @app.get(f"/{config.URLPATH}/{{path_name:path}}")
 async def serve_frontend(path_name: str = ""):
     if index_html_path.exists():
-        return FileResponse(index_html_path)
+        # The page names the build's hashed bundles, so a cached copy keeps
+        # loading the previous release after an update — new menu items and all
+        # never show up. Revalidated every time; the bundles themselves cache.
+        return FileResponse(index_html_path, headers={"Cache-Control": "no-cache"})
     return {"error": "Frontend build not found"}
 
 
