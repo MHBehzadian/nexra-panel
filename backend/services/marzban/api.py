@@ -1,7 +1,10 @@
+import asyncio
 import time
 import json
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from functools import partial
 
 from backend.schema._input import ClientInput, ClientUpdateInput
 
@@ -16,6 +19,11 @@ class APIService:
     # Without this a stalled Marzban holds the panel's request open until nginx
     # gives up and serves a 504.
     _request_timeout = 15
+    # requests blocks, and these methods are called from the panel's event loop:
+    # run there, one slow or unreachable Marzban froze every page of the panel
+    # for as long as it took to answer. Calls run on these threads instead, so
+    # only the request that asked Marzban waits for it.
+    _pool = ThreadPoolExecutor(max_workers=32, thread_name_prefix="marzban")
 
     def __init__(
         self, url: str, username: str, password: str, inbounds: dict | str | None = None
@@ -35,6 +43,14 @@ class APIService:
         else:
             self.inbounds = inbounds or {}
 
+    async def _call(self, method: str, url: str, **kwargs) -> requests.Response:
+        """Every HTTP call to Marzban: off the event loop, and never without a timeout."""
+        kwargs.setdefault("timeout", self._request_timeout)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            self._pool, partial(self.session.request, method.upper(), url, **kwargs)
+        )
+
     async def _login(self):
         now = time.time()
         key = (self.url, self.username)
@@ -45,18 +61,16 @@ class APIService:
             self.headers = {"Authorization": f"Bearer {self.token}"}
             return
 
-        token = (
-            requests.post(
-                f"{self.url}api/admin/token",
-                data={
-                    "username": self.username,
-                    "password": self.password,
-                },
-                timeout=self._request_timeout,
-            )
-            .json()
-            .get("access_token")
+        response = await self._call(
+            "post",
+            f"{self.url}api/admin/token",
+            data={
+                "username": self.username,
+                "password": self.password,
+            },
+            timeout=self._request_timeout,
         )
+        token = response.json().get("access_token")
 
         # A failed login must not be cached, or the panel would keep replaying
         # the failure for the whole TTL.
@@ -85,7 +99,8 @@ class APIService:
         an unreachable Marzban indistinguishable from a wrong password — and told
         the customer their own password was wrong.
         """
-        response = requests.post(
+        response = await self._call(
+            "post",
             f"{self.url}api/admin/token",
             data={"username": self.username, "password": self.password},
             timeout=self._request_timeout,
@@ -98,15 +113,16 @@ class APIService:
     async def get_users(self):
         await self._login()
         url = f"{self.url}api/users"
-        response = self.session.get(url, headers=self.headers).json()
+        response = (await self._call("get", url, headers=self.headers)).json()
         return response
 
     async def get_user(self, username: str) -> dict | bool:
         await self._login()
-        user = self.session.get(
+        user = (await self._call(
+            "get",
             f"{self.url}api/user/{username}",
             headers=self.headers,
-        ).json()
+        )).json()
         return user
 
     async def find_user(self, username: str) -> dict | None:
@@ -115,7 +131,8 @@ class APIService:
         else's user). Raises when Marzban couldn't be asked, so a network
         failure is never mistaken for a deleted user."""
         await self._login()
-        response = self.session.get(
+        response = await self._call(
+            "get",
             f"{self.url}api/user/{username}",
             headers=self.headers,
             timeout=self._request_timeout,
@@ -137,7 +154,8 @@ class APIService:
             params = {"offset": offset, "limit": page_size}
             if admins:
                 params["admin"] = admins
-            response = self.session.get(
+            response = await self._call(
+                "get",
                 f"{self.url}api/users",
                 headers=self.headers,
                 params=params,
@@ -153,7 +171,8 @@ class APIService:
     async def list_newest_users(self, limit: int) -> list[dict]:
         """The most recently created users, newest first. Raises on failure."""
         await self._login()
-        response = self.session.get(
+        response = await self._call(
+            "get",
             f"{self.url}api/users",
             headers=self.headers,
             params={"offset": 0, "limit": limit, "sort": "-created_at"},
@@ -166,7 +185,7 @@ class APIService:
         await self._login()
         url = f"{self.url}api/inbounds"
 
-        response = self.session.get(url, headers=self.headers, timeout=self._request_timeout)
+        response = await self._call("get", url, headers=self.headers, timeout=self._request_timeout)
 
         # Transform to list of tags for each protocol
         inbounds = response.json()
@@ -194,7 +213,8 @@ class APIService:
             "on_hold_timeout": None,
         }
 
-        response = self.session.post(
+        response = await self._call(
+            "post",
             f"{self.url}api/user",
             headers=self.headers,
             json=data,
@@ -216,7 +236,8 @@ class APIService:
             "note": "",
         }
 
-        response = self.session.put(
+        response = await self._call(
+            "put",
             f"{self.url}api/user/{username}",
             headers=self.headers,
             json=update_data,
@@ -225,7 +246,8 @@ class APIService:
 
     async def reset_user_traffic(self, username: str) -> int:
         await self._login()
-        response = self.session.post(
+        response = await self._call(
+            "post",
             f"{self.url}api/user/{username}/reset",
             headers=self.headers,
         )
@@ -233,7 +255,8 @@ class APIService:
 
     async def delete_user(self, username: str) -> int:
         await self._login()
-        response = self.session.delete(
+        response = await self._call(
+            "delete",
             f"{self.url}api/user/{username}",
             headers=self.headers,
         )
@@ -249,7 +272,8 @@ class APIService:
         await self._login()
         for params in ({"username": username}, None):
             try:
-                response = self.session.get(
+                response = await self._call(
+                    "get",
                     f"{self.url}api/admins",
                     headers=self.headers,
                     params=params,
@@ -287,7 +311,8 @@ class APIService:
             if current.get(field) is not None:
                 payload[field] = current[field]
 
-        response = self.session.put(
+        response = await self._call(
+            "put",
             f"{self.url}api/admin/{admin_username}",
             headers=self.headers,
             json=payload,
@@ -303,7 +328,8 @@ class APIService:
         """Marzban's own /api/system snapshot: user counts, lifetime bandwidth
         and the CPU/RAM of the host Marzban itself runs on."""
         await self._login()
-        response = self.session.get(
+        response = await self._call(
+            "get",
             f"{self.url}api/system",
             headers=self.headers,
             timeout=self._request_timeout,
@@ -315,7 +341,8 @@ class APIService:
     async def get_nodes_usage(self, start: str, end: str) -> list[dict]:
         """Per-node traffic for a window. Marzban wants naive ISO timestamps."""
         await self._login()
-        response = self.session.get(
+        response = await self._call(
+            "get",
             f"{self.url}api/nodes/usage",
             headers=self.headers,
             params={"start": start, "end": end},
@@ -330,7 +357,8 @@ class APIService:
         include the master itself, which api/nodes/usage reports separately
         with a null node_id. Read-only, GET /api/nodes."""
         await self._login()
-        response = self.session.get(
+        response = await self._call(
+            "get",
             f"{self.url}api/nodes",
             headers=self.headers,
             timeout=self._request_timeout,
@@ -383,7 +411,8 @@ class APIService:
             if sorted_by_seen:
                 params["sort"] = "-online_at"
 
-            response = self.session.get(
+            response = await self._call(
+                "get",
                 f"{self.url}api/users",
                 headers=self.headers,
                 params=params,
@@ -440,7 +469,8 @@ class APIService:
         """List every admin as Marzban itself has them recorded (username,
         telegram_id, is_sudo, ...). Requires sudo credentials."""
         await self._login()
-        response = self.session.get(
+        response = await self._call(
+            "get",
             f"{self.url}api/admins",
             headers=self.headers,
             timeout=self._request_timeout,
@@ -462,7 +492,8 @@ class APIService:
         if telegram_id:
             payload["telegram_id"] = telegram_id
 
-        response = self.session.post(
+        response = await self._call(
+            "post",
             f"{self.url}api/admin", headers=self.headers, json=payload
         )
         detail = ""

@@ -21,11 +21,13 @@ class Setting(BaseSettings):
     # verify_bot_api_key), everything else keeps working normally.
     BOT_API_KEY: str = ""
     # Seconds between quick checks of Marzban for users made outside Nexra
-    # (see services/marzban/sync.py); 0 turns the sync off altogether.
-    MARZBAN_SYNC_INTERVAL: int = 60
+    # (see services/marzban/sync.py); 0 turns the sync off altogether. Every
+    # six hours by default, to keep the load on Marzban down; lower it (600 is
+    # still light: one page of the newest users) to charge new users sooner.
+    MARZBAN_SYNC_INTERVAL: int = 21600
     # Seconds between full reads of every user, which catch edits, usage
     # resets and deletions made outside Nexra.
-    MARZBAN_FULL_SYNC_INTERVAL: int = 600
+    MARZBAN_FULL_SYNC_INTERVAL: int = 21600
 
     class Config:
         env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
