@@ -29,7 +29,7 @@ they were either paid for through Nexra or made before this existed.
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -57,12 +57,29 @@ def _state(user: dict) -> tuple[int, int]:
     return int(user.get("data_limit") or 0), int(user.get("used_traffic") or 0)
 
 
+def _name_key(name: str | None) -> str:
+    # Marzban on MySQL matches admin names regardless of case, so "Abolfazl" in
+    # Nexra logs in as "abolfazl" there; names are compared the same way here.
+    return (name or "").strip().lower()
+
+
 def _owned_by(user: dict, admin_username: str) -> bool:
     # Older Marzban leaves the admin out of a user; then the user is taken as
     # belonging to whoever was able to read it.
     if "admin" not in user:
         return True
-    return (user.get("admin") or {}).get("username") == admin_username
+    return _name_key((user.get("admin") or {}).get("username")) == _name_key(admin_username)
+
+
+def _created_at(user: dict) -> datetime | None:
+    """When Marzban made the user, as naive UTC like marzban_synced_at."""
+    try:
+        stamp = datetime.fromisoformat(str(user.get("created_at")).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if stamp.tzinfo is not None:
+        stamp = stamp.astimezone(timezone.utc).replace(tzinfo=None)
+    return stamp
 
 
 def settle(
@@ -72,10 +89,15 @@ def settle(
     username: str,
     user: dict | None,
     row: MarzbanUsers | None,
+    synced_at: datetime | None = None,
 ) -> None:
     """Bring one ledger row in line with the user as Marzban has it now
     (None: no longer there for this admin), charging or refunding the
-    difference. The caller commits."""
+    difference. The caller commits.
+
+    A user missing from the ledger but made before the admin's first sync
+    (synced_at) is adopted without charging, like that sync would have: it
+    was missed then, not created since."""
     if user is None:
         if row is not None:
             db.delete(row)
@@ -85,7 +107,10 @@ def settle(
     limit, used = _state(user)
     if row is None:
         db.add(MarzbanUsers(owner=owner, username=username, data_limit=limit, used_traffic=used))
-        limiter.charge(limit)
+        created = _created_at(user)
+        # Marzban gives whole seconds; a user made in the sync's own second is new.
+        if not (synced_at and created and created < synced_at.replace(microsecond=0)):
+            limiter.charge(limit)
         return
 
     old_limit, old_used = row.data_limit, row.used_traffic
@@ -121,16 +146,15 @@ async def refresh(
 
     _writes[admin_username] = _writes.get(admin_username, 0) + 1
     row = crud.get_marzban_ledger_row(db, admin_username, username)
-    if before_change and row is None and user is not None:
-        admin = crud.get_admin_by_username(db, admin_username)
-        if admin.marzban_synced_at is None:
-            # Not synced yet, so this user predates the ledger (the first sync
-            # would adopt it free too); it isn't new.
-            limit, used = _state(user)
-            db.add(MarzbanUsers(owner=admin_username, username=username, data_limit=limit, used_traffic=used))
-            db.commit()
-            return
-    settle(db, AdminLimiter(db, admin_username), admin_username, username, user, row)
+    admin = crud.get_admin_by_username(db, admin_username)
+    if before_change and row is None and user is not None and admin.marzban_synced_at is None:
+        # Not synced yet, so this user predates the ledger (the first sync
+        # would adopt it free too); it isn't new.
+        limit, used = _state(user)
+        db.add(MarzbanUsers(owner=admin_username, username=username, data_limit=limit, used_traffic=used))
+        db.commit()
+        return
+    settle(db, AdminLimiter(db, admin_username), admin_username, username, user, row, admin.marzban_synced_at)
     db.commit()
 
 
@@ -161,14 +185,16 @@ async def _read_newest(
     many users the owners have in all (None if Marzban can't be trusted to
     have filtered by owner). One small request either way."""
     api = APIService(panel_url, panel_username, panel_password)
-    users, total = await api.list_newest_users(NEWEST_PAGE, admins=owners)
+    users, total = await api.list_newest_users(NEWEST_PAGE, admins=[owner.strip() for owner in owners])
     if any("admin" not in user for user in users):
         return {}, None  # No owner on the users; the full sync reads per admin.
     by_owner: dict[str, dict[str, dict]] = {owner: {} for owner in owners}
+    names = {_name_key(owner): owner for owner in owners}
     filtered = True
     for user in users:
-        if _owner(user) in by_owner and user.get("username"):
-            by_owner[_owner(user)][user["username"]] = user
+        owner = names.get(_name_key(_owner(user)))
+        if owner and user.get("username"):
+            by_owner[owner][user["username"]] = user
         else:
             filtered = False  # Marzban ignored the owner filter; total is everyone's.
     return by_owner, total if filtered else None
@@ -185,12 +211,12 @@ async def _read_panel(
     panel: {owner: (users by name, ledger users that are gone)}. An owner
     missing from the result couldn't be read and is left alone this time."""
     api = APIService(panel_url, panel_username, panel_password)
-    users = await api.list_users(admins=list(owners))
+    users = await api.list_users(admins=[owner.strip() for owner in owners])
     result = {}
     if any("admin" not in user for user in users):
         # This Marzban doesn't say who owns a user, so ask as each admin.
         for owner, password in owners.items():
-            own_api = APIService(panel_url, owner, password or "")
+            own_api = APIService(panel_url, owner.strip(), password or "")
             try:
                 found = {u["username"]: u for u in await own_api.list_users() if u.get("username")}
                 result[owner] = (found, await _confirm_gone(own_api, owner, found, known[owner]))
@@ -199,9 +225,11 @@ async def _read_panel(
         return result
 
     by_owner: dict[str, dict[str, dict]] = {owner: {} for owner in owners}
+    names = {_name_key(owner): owner for owner in owners}
     for user in users:
-        if _owner(user) in by_owner and user.get("username"):
-            by_owner[_owner(user)][user["username"]] = user
+        owner = names.get(_name_key(_owner(user)))
+        if owner and user.get("username"):
+            by_owner[owner][user["username"]] = user
     for owner, found in by_owner.items():
         try:
             result[owner] = (found, await _confirm_gone(api, owner, found, known[owner]))
@@ -210,7 +238,9 @@ async def _read_panel(
     return result
 
 
-def _apply(panel_name: str, owner: str, found: dict[str, dict], gone: set[str], full: bool) -> None:
+def _apply(
+    panel_name: str, owner: str, found: dict[str, dict], gone: set[str], full: bool, read_at: datetime
+) -> None:
     db = sessionLocal()
     try:
         admin = crud.get_admin_by_username(db, owner)
@@ -229,7 +259,9 @@ def _apply(panel_name: str, owner: str, found: dict[str, dict], gone: set[str], 
                     db.add(MarzbanUsers(owner=owner, username=username, data_limit=limit, used_traffic=used))
                 else:
                     row.data_limit, row.used_traffic = limit, used
-            admin.marzban_synced_at = datetime.utcnow()
+            # When the read began: a user made while it ran may be missing
+            # from it, and must still count as new afterwards.
+            admin.marzban_synced_at = read_at
             db.commit()
             logger.info(f"Marzban sync: adopted {len(found)} existing users of {owner} without charging")
             return
@@ -237,7 +269,7 @@ def _apply(panel_name: str, owner: str, found: dict[str, dict], gone: set[str], 
         limiter = AdminLimiter(db, owner)
         before = admin.traffic
         for username, user in found.items():
-            settle(db, limiter, owner, username, user, ledger.get(username))
+            settle(db, limiter, owner, username, user, ledger.get(username), admin.marzban_synced_at)
         for username in gone:
             if username in ledger:
                 settle(db, limiter, owner, username, None, ledger[username])
@@ -276,6 +308,7 @@ async def sync_panel(panel_name: str, full: bool) -> bool:
         return False
 
     writes = {o: _writes.get(o, 0) for o in owners}
+    read_at = datetime.utcnow()
     total = None
     try:
         if full:
@@ -297,7 +330,7 @@ async def sync_panel(panel_name: str, full: bool) -> bool:
         if _writes.get(owner, 0) != writes[owner]:
             continue
         try:
-            _apply(panel_name, owner, found, gone, full)
+            _apply(panel_name, owner, found, gone, full, read_at)
         except Exception as exc:
             logger.error(f"Marzban sync failed for {owner}: {exc}")
 
