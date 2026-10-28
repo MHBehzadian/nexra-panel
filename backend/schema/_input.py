@@ -86,6 +86,13 @@ class BotChangePasswordInput(BaseModel):
     username: Optional[str] = None
 
 
+class BotSuspensionInput(BaseModel):
+    telegram_id: int
+    username: Optional[str] = None
+    # Why the panel is locked; None lifts the lock.
+    reason: Optional[str] = None
+
+
 class BotCreateAdminInput(BaseModel):
     """Superadmin provisioning a new reseller panel from the bot."""
 

@@ -18,6 +18,7 @@ import os
 import re
 import tempfile
 from datetime import datetime
+from types import SimpleNamespace
 
 import httpx
 from fastapi import APIRouter, Depends, File, Request, UploadFile, status
@@ -32,6 +33,7 @@ from backend.schema._input import TelegramBotInput, TelegramBotUpdateInput
 from backend.schema.output import ResponseModel, TelegramBotOutput
 from backend.utils.logger import logger
 from backend.utils.settings_store import DATA_DIR
+from backend.api.topup_bot.routers import load_connection as load_topup_connection, key_for as topup_key
 
 router = APIRouter(prefix="/sales-bots", tags=["Sales bots"])
 
@@ -315,9 +317,13 @@ async def register_bot(body: dict, db: Session = Depends(get_db), user: dict = D
     existing = next((b for b in crud.get_all_bots(db) if b.url == url), None)
     if existing:
         values = dict(owner_key=owner_key, manager_key=manager_key, bot_username=info.get("bot_username"))
-        # an admin it already has (given by hand or earlier) is kept
-        if existing.admin_id is None and owner:
+        # an admin it already has (given by hand or earlier) is kept, unless
+        # the bot started over (install.sh reset) and its owner was found again
+        reassign = bool(body.get("reassign"))
+        if owner and (existing.admin_id is None or reassign):
             values["admin_id"] = owner.id
+        elif reassign:
+            values["admin_id"] = None  # a bot that started over is not the old owner's any more
         elif existing.admin_id is not None:
             had = next((a for a in crud.get_all_admins(db) if a.id == existing.admin_id), None)
             reason = f"kept the admin it already had ({had.username if had else existing.admin_id})"
@@ -398,6 +404,15 @@ async def _bot_call(bot: TelegramBots, method: str, path: str, body: dict | None
         return 502, {"ok": False, "error": f"Bot is unreachable: {e.__class__.__name__}"}
 
 
+def _topup_bot():
+    """The top-up bot, shaped like a sales bot connection for _bot_call, or None.
+    It speaks the same emoji API, so packs can be read and pushed through it too."""
+    conn = load_topup_connection()
+    if not conn.get("url"):
+        return None
+    return SimpleNamespace(name="Top-up bot", url=conn["url"], owner_key=topup_key(conn))
+
+
 async def _push_emoji_allow(db: Session, only: TelegramBots | None = None) -> list[dict]:
     """Send the allowed emoji ids to every bot (or one). Returns per-bot results."""
     packs = _load_packs()
@@ -405,7 +420,8 @@ async def _push_emoji_allow(db: Session, only: TelegramBots | None = None) -> li
         return []
     ids = sorted({e["id"] for p in packs for e in p.get("emojis", [])})
     results = []
-    for bot in [only] if only else crud.get_all_bots(db):
+    targets = [only] if only else crud.get_all_bots(db) + [b for b in [_topup_bot()] if b]
+    for bot in targets:
         code, body = await _bot_call(bot, "PUT", "emoji-allow", {"ids": ids})
         results.append({"bot": bot.name, "ok": code == 200, "error": None if code == 200 else body.get("error")})
         if code != 200:
@@ -435,7 +451,7 @@ async def add_pack(body: dict, db: Session = Depends(get_db), user: dict = Depen
         if not PACK_NAME.match(name):
             return _fail(400, "لینک پک (t.me/addemoji/…)، نام پک یا شناسه‌ی ایموجی‌ها را بگذارید")
         names = [name]
-    bots = [b for b in crud.get_all_bots(db) if b.is_active] or crud.get_all_bots(db)
+    bots = [b for b in crud.get_all_bots(db) if b.is_active] or crud.get_all_bots(db) or [b for b in [_topup_bot()] if b]
     if not bots:
         return _fail(400, "Connect a bot first; packs are read through a bot")
     via = bots[0]

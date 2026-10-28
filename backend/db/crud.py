@@ -151,6 +151,11 @@ def grant_admin_traffic(db: Session, admin: Admins, added_traffic) -> None:
     db.commit()
 
 
+def set_suspended_reason(db: Session, admin: Admins, reason: str | None) -> None:
+    admin.suspended_reason = reason
+    db.commit()
+
+
 def update_marzban_password(db: Session, admin: Admins, new_password: str) -> None:
     """Set both passwords an admin has, keeping them in step.
 

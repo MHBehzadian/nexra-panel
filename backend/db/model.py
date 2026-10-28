@@ -26,6 +26,11 @@ class Admins(Base):
     # services/marzban/sync.py). Null means the next sync adopts whatever is
     # on Marzban as already paid for, without charging.
     marzban_synced_at = Column(DateTime, nullable=True)
+    # Set by the top-up bot when it locks this panel ("unpaid" for an unpaid
+    # weekly invoice, "manual" for a lock the superadmin placed), cleared when
+    # it gives the panel back. A lock works by changing the password, so without
+    # this the admin is only ever told "wrong password" and never why.
+    suspended_reason = Column(String, nullable=True)
 
 
 class Panels(Base):
