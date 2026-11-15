@@ -10,6 +10,7 @@ import { Empty, ErrorBox, Field, Loading, Notice, Spinner, Switch, selectClass, 
 
 const TYPES: Record<string, string> = {
     marzban: 'Marzban',
+    pasarguard: 'PasarGuard (پاسارگارد)',
     nexra: 'Nexra Panel',
     marzneshin: 'Marzneshin',
     'x-ui_single': 'X-UI (سنایی)',
