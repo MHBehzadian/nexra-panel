@@ -204,14 +204,14 @@ export function AnalyticsPage(): JSX.Element {
         <div dir="rtl" className="space-y-6 p-4 md:p-6 max-w-full overflow-x-hidden">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">آنالیز</h1>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Analytics</h1>
                     <p className="text-muted-foreground">
                         مصرف کاربران شما، میزان فروشتان و پیش‌بینی اینکه حجمتان کی تمام می‌شود
                     </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => load(false)} disabled={refreshing}>
                     <RefreshCw className={cn('h-4 w-4 ml-2', refreshing && 'animate-spin')} />
-                    {refreshing ? 'در حال به‌روزرسانی...' : 'به‌روزرسانی'}
+                    {refreshing ? 'Refreshing...' : 'Refresh'}
                 </Button>
             </div>
 
@@ -235,15 +235,15 @@ export function AnalyticsPage(): JSX.Element {
                             title="میانگین فروش روزانه"
                             icon={ShoppingCart}
                             value={traffic(sales.per_day)}
-                            caption={`میانگین ${fa(sales.window_days)} روز گذشته`}
-                            hint="حجمی که هر روز به‌طور میانگین فروخته‌اید: ساخت کاربر جدید، تمدید و افزایش حجم، منهای حجم‌هایی که برگشت خورده."
+                            caption={`میانگین فروش ${fa(sales.window_days)} روز گذشته`}
+                            hint={`کل فروش ${fa(sales.window_days)} روز گذشته تقسیم بر ${fa(sales.window_days)}: ساخت کاربر جدید، تمدید و افزایش حجم، منهای حجم‌هایی که برگشت خورده.`}
                         />
                         <StatCard
                             title="پیش‌بینی فروش فردا"
                             icon={TrendingUp}
                             value={traffic(sales.tomorrow)}
-                            caption="حجم کاربرانی که احتمالاً فردا می‌سازید"
-                            hint={`اگر فردا هم مثل ${fa(sales.window_days)} روز گذشته بفروشید، حدوداً این مقدار از حجم شما کم می‌شود.`}
+                            caption={`بر اساس فروش ${fa(sales.tomorrow_window_hours)} ساعت گذشته`}
+                            hint={`اگر فردا هم به اندازه‌ی ${fa(sales.tomorrow_window_hours)} ساعت گذشته بفروشید، حدوداً این مقدار حجم برای کاربران جدید از حساب شما کم می‌شود.`}
                         />
                         <RunwayCard data={data} />
                     </div>

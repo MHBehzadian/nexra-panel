@@ -378,7 +378,9 @@ export interface AdminAnalytics {
         window_days: number
         window_total: number
         per_day: number
+        /** Sales of the last `tomorrow_window_hours`, as tomorrow's forecast. */
         tomorrow: number
+        tomorrow_window_hours: number
         /** null when nothing was sold lately (the balance isn't running down). */
         days_left: number | null
         runs_out_at: string | null

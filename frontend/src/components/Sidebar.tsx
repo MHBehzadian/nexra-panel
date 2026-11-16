@@ -36,7 +36,7 @@ const navigationItems = [
         roles: ['admin', 'superadmin'],
     },
     {
-        label: 'آنالیز',
+        label: 'Analytics',
         href: '/analytics',
         icon: LineChart,
         roles: ['admin'],

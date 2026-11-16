@@ -1,7 +1,8 @@
 """What the admin's Analytics page shows: their users' usage hour by hour and
 day by day, which Marzban nodes those users use most, and how fast the admin
-sells traffic - with the sales rate turned into a forecast for tomorrow and a
-count of the days left until the balance runs out.
+sells traffic: a daily average over the last week (which also gives the days
+left until the balance runs out) and a forecast for tomorrow from the last 24
+hours.
 
 Usage comes from AdminUsageHourly, which the Marzban sync fills while it reads
 users anyway; sales from AdminTrafficLog, written wherever the balance is
@@ -19,8 +20,10 @@ from sqlalchemy.orm import Session
 from backend.config import config
 from backend.db.model import Admins, AdminTrafficLog, AdminUsageHourly
 
-# The forecast averages the sales of this many days back from now.
-SALES_WINDOW_DAYS = 3
+# The daily sales average (and the days left) covers this many days back from
+# now; tomorrow's forecast is the sales of the last TOMORROW_WINDOW_HOURS.
+SALES_WINDOW_DAYS = 7
+TOMORROW_WINDOW_HOURS = 24
 # History kept; older rows are pruned by the sync loop.
 RETENTION_DAYS = 90
 HOURS_SHOWN = 24
@@ -138,6 +141,7 @@ def _usage(db: Session, admin_id: int, now: datetime) -> dict:
 def _sales(db: Session, admin: Admins, now: datetime) -> dict:
     first_day = day_start(now) - timedelta(days=DAYS_SHOWN - 1)
     window_start = now - timedelta(days=SALES_WINDOW_DAYS)
+    tomorrow_start = now - timedelta(hours=TOMORROW_WINDOW_HOURS)
     rows = (
         db.query(AdminTrafficLog.created_at, AdminTrafficLog.amount)
         .filter(
@@ -148,11 +152,14 @@ def _sales(db: Session, admin: Admins, now: datetime) -> dict:
     )
     by_day: dict[datetime, int] = {}
     window_total = 0
+    last_24h = 0
     for created_at, amount in rows:
         day = day_start(created_at)
         by_day[day] = by_day.get(day, 0) + int(amount)
         if created_at >= window_start:
             window_total += int(amount)
+        if created_at >= tomorrow_start:
+            last_24h += int(amount)
 
     daily = []
     for i in range(DAYS_SHOWN):
@@ -170,8 +177,21 @@ def _sales(db: Session, admin: Admins, now: datetime) -> dict:
     else:
         days_left = None  # No sales lately: the balance isn't running down.
 
-    started = (
+    # How far back the log really reaches: the earlier sales read from
+    # Marzban cover DAYS_SHOWN days before the backfill ran, sales or not.
+    backfilled_at = (
         db.query(func.min(AdminTrafficLog.created_at))
+        .filter(
+            AdminTrafficLog.admin_id == admin.id,
+            AdminTrafficLog.kind == "backfill",
+            AdminTrafficLog.amount == 0,
+        )
+        .scalar()
+    )
+    started = (
+        backfilled_at - timedelta(days=DAYS_SHOWN)
+        if backfilled_at
+        else db.query(func.min(AdminTrafficLog.created_at))
         .filter(AdminTrafficLog.admin_id == admin.id, AdminTrafficLog.amount != 0)
         .scalar()
     )
@@ -182,7 +202,8 @@ def _sales(db: Session, admin: Admins, now: datetime) -> dict:
         "window_days": SALES_WINDOW_DAYS,
         "window_total": window_total,
         "per_day": int(per_day),
-        "tomorrow": int(per_day),
+        "tomorrow": max(last_24h, 0),
+        "tomorrow_window_hours": TOMORROW_WINDOW_HOURS,
         "days_left": round(days_left, 1) if days_left is not None else None,
         "runs_out_at": (now + timedelta(days=days_left)).isoformat() if days_left else None,
         # Less than the full window behind the average: say so on the page.
