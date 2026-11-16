@@ -391,3 +391,12 @@ export interface AdminAnalytics {
         total: number
     }
 }
+
+export interface NodeNamesPanel {
+    panel_id: number
+    panel_name: string
+    /** false when the node list couldn't be read from Marzban. */
+    reachable: boolean
+    /** key is Marzban's node id, or "master"; name is '' when not renamed. */
+    nodes: { key: string; marzban_name: string; name: string }[]
+}

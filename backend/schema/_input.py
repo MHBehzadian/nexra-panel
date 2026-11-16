@@ -147,6 +147,11 @@ class SettingsInput(BaseModel):
     agent_base_url: Optional[str] = None
 
 
+class NodeNamesInput(BaseModel):
+    # Node key ("master" or Marzban's node id) -> name; blank restores Marzban's.
+    names: dict[str, str] = {}
+
+
 class TelegramBotInput(BaseModel):
     name: str
     url: str

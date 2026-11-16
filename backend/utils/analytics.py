@@ -202,6 +202,25 @@ def build_admin_analytics(db: Session, admin: Admins, now: datetime | None = Non
     }
 
 
+def node_key(node_id) -> str:
+    """How node names are keyed in settings: Marzban's id, or "master" for
+    the main server (which Marzban reports with no id)."""
+    return "master" if node_id in (None, 0) else str(node_id)
+
+
+def apply_node_names(nodes: list[dict], names: dict[str, str]) -> list[dict]:
+    """Swap Marzban's node names for the ones set in the panel. Nodes given
+    the same name are shown as one (e.g. two servers in one country)."""
+    merged: dict[str, dict] = {}
+    for node in nodes:
+        name = names.get(node_key(node["id"])) or node["name"]
+        if name in merged:
+            merged[name]["used"] += node["used"]
+        else:
+            merged[name] = {**node, "name": name}
+    return sorted(merged.values(), key=lambda n: n["used"], reverse=True)
+
+
 async def admin_node_usage(api_service, admin: Admins, period: str) -> list[dict]:
     """Which nodes this admin's users used most in the period, biggest first.
     Served from a short cache; a failure raises."""

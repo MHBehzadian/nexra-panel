@@ -24,6 +24,10 @@ DEFAULTS = {
     # domain the panel is open on", which is wrong when one of the panel's
     # domains is routable from the monitored servers and another isn't.
     "agent_base_url": "",
+    # Names admins see for Marzban nodes on their Analytics page, in place of
+    # the names set in Marzban: {panel id: {node key: name}}, where the node
+    # key is Marzban's node id, or "master" for the main server.
+    "node_names": {},
 }
 
 
@@ -59,6 +63,27 @@ def update_settings(patch: dict) -> dict:
             json.dump(data, f, ensure_ascii=False, indent=2)
         os.replace(tmp, SETTINGS_PATH)
     return get_settings()
+
+
+def get_node_names() -> dict[str, dict[str, str]]:
+    names = _read().get("node_names")
+    return dict(names) if isinstance(names, dict) else {}
+
+
+def set_panel_node_names(panel_id: int, names: dict[str, str]) -> dict[str, str]:
+    """Replace one panel's node names. Blank names are dropped, which puts
+    the node's Marzban name back."""
+    cleaned = {
+        str(key): str(name).strip()[:64]
+        for key, name in names.items()
+        if isinstance(name, str) and name.strip()
+    }
+    all_names = get_node_names()
+    all_names[str(panel_id)] = cleaned
+    if not cleaned:
+        all_names.pop(str(panel_id), None)
+    update_settings({"node_names": all_names})
+    return cleaned
 
 
 def get_public_branding() -> dict:

@@ -18,6 +18,7 @@ from backend.schema.output import ResponseModel
 from backend.services.marzban import APIService as MarzbanAPI
 from backend.utils import analytics
 from backend.utils.logger import logger
+from backend.utils.settings_store import get_node_names
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -141,6 +142,7 @@ async def get_analytics(
         try:
             api_service = MarzbanAPI(url=panel.url, username=panel.username, password=panel.password)
             items = await analytics.admin_node_usage(api_service, admin, period)
+            items = analytics.apply_node_names(items, get_node_names().get(str(panel.id), {}))
             data["nodes"] = {"period": period, "items": items, "total": sum(n["used"] for n in items)}
         except Exception as e:
             logger.warning(f"Analytics: could not read node usage of {admin.username}: {e}")

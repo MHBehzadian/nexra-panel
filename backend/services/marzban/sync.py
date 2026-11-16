@@ -164,8 +164,19 @@ async def refresh(
         db.commit()
         return
     used = settle(db, AdminLimiter(db, admin_username), admin_username, username, user, row, admin.marzban_synced_at)
-    analytics.record_usage(db, admin.id, used, datetime.utcnow())
     db.commit()
+    _record_usage(db, admin.id, used, datetime.utcnow())
+
+
+def _record_usage(db: Session, admin_id: int, used: int, at: datetime) -> None:
+    """Analytics only: runs after the ledger and charges are committed, and a
+    failure here is logged and dropped, so it can never undo or block them."""
+    try:
+        analytics.record_usage(db, admin_id, used, at)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning(f"Analytics: could not record usage of admin {admin_id}: {exc}")
 
 
 def _owner(user: dict) -> str | None:
@@ -252,7 +263,17 @@ def _backfill_sales(db: Session, admin, found: dict[str, dict], read_at: datetim
     """Once per admin, log the sales made before the sales log existed, so the
     forecast has days to average from the start. Only new users can be told
     apart afterwards (by their creation date), so renewals and raised limits
-    from back then are missed. The caller commits."""
+    from back then are missed. Commits on its own; a failure is logged and
+    rolled back, so it never holds up the charges that follow."""
+    try:
+        _log_earlier_sales(db, admin, found, read_at)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning(f"Analytics: could not log earlier sales of {admin.username}: {exc}")
+
+
+def _log_earlier_sales(db: Session, admin, found: dict[str, dict], read_at: datetime) -> None:
     if analytics.sales_backfilled(db, admin.id):
         return
     started = analytics.sales_log_start(db, admin.id)
@@ -293,8 +314,8 @@ def _apply(
             # When the read began: a user made while it ran may be missing
             # from it, and must still count as new afterwards.
             admin.marzban_synced_at = read_at
-            _backfill_sales(db, admin, found, read_at)
             db.commit()
+            _backfill_sales(db, admin, found, read_at)
             logger.info(f"Marzban sync: adopted {len(found)} existing users of {owner} without charging")
             return
 
@@ -302,7 +323,6 @@ def _apply(
             # Before settling, and only users already in the ledger: the new
             # ones are about to be charged, and logged, below.
             _backfill_sales(db, admin, {n: u for n, u in found.items() if n in ledger}, read_at)
-            db.commit()
 
         limiter = AdminLimiter(db, owner)
         before = admin.traffic
@@ -312,8 +332,8 @@ def _apply(
         for username in gone:
             if username in ledger:
                 settle(db, limiter, owner, username, None, ledger[username])
-        analytics.record_usage(db, admin.id, used, read_at)
         db.commit()
+        _record_usage(db, admin.id, used, read_at)
 
         change = before - admin.traffic
         if change:

@@ -135,25 +135,33 @@ def remove_admin(db: Session, admin_id: int) -> bool:
     return False
 
 
+def _log_sale(db: Session, admin: Admins, amount, kind: str) -> None:
+    """Adds the sales-log row to the same commit as the balance change. Only
+    analytics reads it, so a bad value is skipped rather than raised."""
+    try:
+        amount = int(amount or 0)
+    except (TypeError, ValueError):
+        return
+    if amount and admin.id is not None:
+        db.add(AdminTrafficLog(admin_id=admin.id, amount=amount, kind=kind))
+
+
 # Traffic is changed in SQL (traffic = traffic - x), not as a Python
 # read-modify-write: the Marzban sync and the request handlers each hold their
 # own session, and a stale copy of the row would otherwise overwrite the other's
 # charge. The balance may go below zero: users made outside Nexra (in Marzban or
 # by a sales bot) are charged whether or not the admin had the traffic left.
-#
 # Both are only ever called for sales (see limit_handler.py), so each change is
 # also written to the sales log the analytics page averages.
 def reduce_admin_traffic(db: Session, admin: Admins, used_traffic) -> None:
     admin.traffic = Admins.traffic - used_traffic
-    if used_traffic:
-        db.add(AdminTrafficLog(admin_id=admin.id, amount=int(used_traffic), kind="charge"))
+    _log_sale(db, admin, used_traffic, "charge")
     db.commit()
 
 
 def increase_admin_traffic(db: Session, admin: Admins, added_traffic) -> None:
     admin.traffic = Admins.traffic + added_traffic
-    if added_traffic:
-        db.add(AdminTrafficLog(admin_id=admin.id, amount=-int(added_traffic), kind="refund"))
+    _log_sale(db, admin, -added_traffic, "refund")
     db.commit()
 
 
