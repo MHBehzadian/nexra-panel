@@ -12,6 +12,8 @@ import {
     MarzbanOverview,
     ServerOutput,
     ServerCreatedOutput,
+    AdminAnalytics,
+    AnalyticsNodePeriod,
 } from '@/types'
 import { gbToBytes } from './traffic-converter'
 
@@ -98,6 +100,19 @@ export const dashboardAPI = {
         )
 
         return response.data.data ?? null
+    },
+}
+
+// Analytics API (admin role)
+export const analyticsAPI = {
+    get: async (period: AnalyticsNodePeriod = '1d'): Promise<AdminAnalytics> => {
+        const response = await api.get<ResponseModel<AdminAnalytics>>(`/admin/analytics`, { params: { period } })
+
+        if (!response.data.success || !response.data.data) {
+            throw new Error(response.data.message || 'Failed to fetch analytics')
+        }
+
+        return response.data.data
     },
 }
 

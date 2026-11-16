@@ -2,7 +2,17 @@ from datetime import datetime
 from secrets import token_hex
 from sqlalchemy.orm import Session
 
-from backend.db.model import Admins, Panels, News, SanaeiUsers, Servers, TelegramBots, MarzbanUsers
+from backend.db.model import (
+    Admins,
+    Panels,
+    News,
+    SanaeiUsers,
+    Servers,
+    TelegramBots,
+    MarzbanUsers,
+    AdminUsageHourly,
+    AdminTrafficLog,
+)
 from backend.schema._input import AdminInput, AdminUpdateInput, PanelInput
 from backend.auth.hash import hash_password
 
@@ -117,6 +127,8 @@ def remove_admin(db: Session, admin_id: int) -> bool:
         # the bot stays (superadmin-only) instead of pointing at a dead id.
         db.query(TelegramBots).filter(TelegramBots.admin_id == admin_id).update({TelegramBots.admin_id: None})
         db.query(MarzbanUsers).filter(MarzbanUsers.owner == admin.username).delete()
+        db.query(AdminUsageHourly).filter(AdminUsageHourly.admin_id == admin_id).delete()
+        db.query(AdminTrafficLog).filter(AdminTrafficLog.admin_id == admin_id).delete()
         db.delete(admin)
         db.commit()
         return True
@@ -128,13 +140,20 @@ def remove_admin(db: Session, admin_id: int) -> bool:
 # own session, and a stale copy of the row would otherwise overwrite the other's
 # charge. The balance may go below zero: users made outside Nexra (in Marzban or
 # by a sales bot) are charged whether or not the admin had the traffic left.
+#
+# Both are only ever called for sales (see limit_handler.py), so each change is
+# also written to the sales log the analytics page averages.
 def reduce_admin_traffic(db: Session, admin: Admins, used_traffic) -> None:
     admin.traffic = Admins.traffic - used_traffic
+    if used_traffic:
+        db.add(AdminTrafficLog(admin_id=admin.id, amount=int(used_traffic), kind="charge"))
     db.commit()
 
 
 def increase_admin_traffic(db: Session, admin: Admins, added_traffic) -> None:
     admin.traffic = Admins.traffic + added_traffic
+    if added_traffic:
+        db.add(AdminTrafficLog(admin_id=admin.id, amount=-int(added_traffic), kind="refund"))
     db.commit()
 
 

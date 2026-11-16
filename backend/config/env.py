@@ -26,6 +26,9 @@ class Setting(BaseSettings):
     # Seconds between full reads of every user, which catch edits, usage
     # resets and deletions made outside Nexra.
     MARZBAN_FULL_SYNC_INTERVAL: int = 600
+    # Local time the analytics page counts hours and days in, as minutes
+    # ahead of UTC (210 = Tehran).
+    ANALYTICS_UTC_OFFSET_MINUTES: int = 210
 
     class Config:
         env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")

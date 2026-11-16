@@ -25,19 +25,24 @@ balance can go negative.
 
 An admin's first sync only adopts the users already there, without charging:
 they were either paid for through Nexra or made before this existed.
+
+The growth in each user's used traffic seen while settling is also added to
+the admin's hourly usage (backend/utils/analytics.py), so the Analytics page
+costs Marzban nothing beyond the reads made here anyway.
 """
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
 from backend.config import config
 from backend.db import crud
 from backend.db.engin import sessionLocal
-from backend.db.model import MarzbanUsers
+from backend.db.model import AdminTrafficLog, MarzbanUsers
 from backend.services.limit_handler import AdminLimiter
+from backend.utils import analytics
 from backend.services.marzban.api import APIService
 from backend.utils.logger import logger
 
@@ -90,10 +95,11 @@ def settle(
     user: dict | None,
     row: MarzbanUsers | None,
     synced_at: datetime | None = None,
-) -> None:
+) -> int:
     """Bring one ledger row in line with the user as Marzban has it now
     (None: no longer there for this admin), charging or refunding the
-    difference. The caller commits.
+    difference. The caller commits. Returns how much the user used since the
+    ledger last saw it, for the admin's usage history.
 
     A user missing from the ledger but made before the admin's first sync
     (synced_at) is adopted without charging, like that sync would have: it
@@ -102,7 +108,7 @@ def settle(
         if row is not None:
             db.delete(row)
             limiter.increase_usage(max(row.data_limit - row.used_traffic, 0))
-        return
+        return 0
 
     limit, used = _state(user)
     if row is None:
@@ -111,11 +117,12 @@ def settle(
         # Marzban gives whole seconds; a user made in the sync's own second is new.
         if not (synced_at and created and created < synced_at.replace(microsecond=0)):
             limiter.charge(limit)
-        return
+        # What a user new to the ledger had used came before this sighting.
+        return 0
 
     old_limit, old_used = row.data_limit, row.used_traffic
     if (limit, used) == (old_limit, old_used):
-        return
+        return 0
     # The row is updated before charging: the limiter commits, and a charge
     # committed beside a stale row would be charged again on the next pass.
     row.data_limit, row.used_traffic = limit, used
@@ -124,6 +131,8 @@ def settle(
         limiter.charge(min(old_used, old_limit))
     if limit != old_limit:
         limiter.apply_update(old_limit, limit, used)
+    # After a reset the whole of `used` is new.
+    return used - old_used if used >= old_used else used
 
 
 async def refresh(
@@ -154,7 +163,8 @@ async def refresh(
         db.add(MarzbanUsers(owner=admin_username, username=username, data_limit=limit, used_traffic=used))
         db.commit()
         return
-    settle(db, AdminLimiter(db, admin_username), admin_username, username, user, row, admin.marzban_synced_at)
+    used = settle(db, AdminLimiter(db, admin_username), admin_username, username, user, row, admin.marzban_synced_at)
+    analytics.record_usage(db, admin.id, used, datetime.utcnow())
     db.commit()
 
 
@@ -238,6 +248,27 @@ async def _read_panel(
     return result
 
 
+def _backfill_sales(db: Session, admin, found: dict[str, dict], read_at: datetime) -> None:
+    """Once per admin, log the sales made before the sales log existed, so the
+    forecast has days to average from the start. Only new users can be told
+    apart afterwards (by their creation date), so renewals and raised limits
+    from back then are missed. The caller commits."""
+    if analytics.sales_backfilled(db, admin.id):
+        return
+    started = analytics.sales_log_start(db, admin.id)
+    until = min(started, read_at) if started else read_at
+    since = until - timedelta(days=analytics.DAYS_SHOWN)
+    count = 0
+    for user in found.values():
+        created = _created_at(user)
+        limit, _ = _state(user)
+        if created and since <= created < until and limit > 0:
+            db.add(AdminTrafficLog(admin_id=admin.id, amount=limit, kind="backfill", created_at=created))
+            count += 1
+    db.add(AdminTrafficLog(admin_id=admin.id, amount=0, kind="backfill", created_at=read_at))
+    logger.info(f"Analytics: logged {count} earlier sales of {admin.username} from Marzban")
+
+
 def _apply(
     panel_name: str, owner: str, found: dict[str, dict], gone: set[str], full: bool, read_at: datetime
 ) -> None:
@@ -262,17 +293,26 @@ def _apply(
             # When the read began: a user made while it ran may be missing
             # from it, and must still count as new afterwards.
             admin.marzban_synced_at = read_at
+            _backfill_sales(db, admin, found, read_at)
             db.commit()
             logger.info(f"Marzban sync: adopted {len(found)} existing users of {owner} without charging")
             return
 
+        if full:
+            # Before settling, and only users already in the ledger: the new
+            # ones are about to be charged, and logged, below.
+            _backfill_sales(db, admin, {n: u for n, u in found.items() if n in ledger}, read_at)
+            db.commit()
+
         limiter = AdminLimiter(db, owner)
         before = admin.traffic
+        used = 0
         for username, user in found.items():
-            settle(db, limiter, owner, username, user, ledger.get(username), admin.marzban_synced_at)
+            used += settle(db, limiter, owner, username, user, ledger.get(username), admin.marzban_synced_at)
         for username in gone:
             if username in ledger:
                 settle(db, limiter, owner, username, None, ledger[username])
+        analytics.record_usage(db, admin.id, used, read_at)
         db.commit()
 
         change = before - admin.traffic
@@ -369,14 +409,29 @@ async def sync_all(full: bool | None = None) -> None:
             await sync_panel(name, full=True)
 
 
+def _prune_analytics() -> None:
+    db = sessionLocal()
+    try:
+        analytics.prune(db)
+    finally:
+        db.close()
+
+
 async def marzban_sync_loop():
     if config.MARZBAN_SYNC_INTERVAL <= 0:
         return
     # Let the app finish starting before the first (and largest) read.
     await asyncio.sleep(10)
+    last_prune = float("-inf")
     while True:
         try:
             await sync_all()
         except Exception as exc:
             logger.error(f"Marzban sync error: {exc}")
+        if time.monotonic() - last_prune >= 3600:
+            last_prune = time.monotonic()
+            try:
+                _prune_analytics()
+            except Exception as exc:
+                logger.error(f"Analytics prune error: {exc}")
         await asyncio.sleep(config.MARZBAN_SYNC_INTERVAL)

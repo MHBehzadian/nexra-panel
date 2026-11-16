@@ -355,3 +355,39 @@ export interface DashboardData {
     panels?: PanelOutput[]
     system?: SystemInfo
 }
+
+export type AnalyticsNodePeriod = '1d' | '7d' | '30d'
+
+export interface AdminAnalytics {
+    generated_at: string
+    utc_offset_minutes: number
+    remaining: number
+    initial: number
+    usage: {
+        today: number
+        yesterday: number
+        /** Last 24 local hours, oldest first; `label` is the local "HH:00". */
+        hourly: { start: string; label: string; used: number }[]
+        /** Last 7 local days, oldest first, today last. */
+        daily: { start: string; date: string; used: number }[]
+        /** When usage started being recorded, null before the first sync. */
+        since: string | null
+    }
+    sales: {
+        daily: { start: string; date: string; sold: number }[]
+        window_days: number
+        window_total: number
+        per_day: number
+        tomorrow: number
+        /** null when nothing was sold lately (the balance isn't running down). */
+        days_left: number | null
+        runs_out_at: string | null
+        days_covered: number
+    }
+    nodes: {
+        period: AnalyticsNodePeriod
+        /** null when Marzban couldn't be read. */
+        items: { id: number | null; name: string; used: number }[] | null
+        total: number
+    }
+}
