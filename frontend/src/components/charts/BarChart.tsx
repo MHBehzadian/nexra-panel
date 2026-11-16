@@ -80,7 +80,7 @@ export function BarChart({
     const tipLeft = active !== null ? ((PAD_LEFT + slot * active + slot / 2) / WIDTH) * 100 : 0
 
     return (
-        <div ref={box} className={cn('relative w-full', className)} onMouseLeave={() => setActive(null)}>
+        <div ref={box} dir="ltr" className={cn('relative w-full', className)} onMouseLeave={() => setActive(null)}>
             <svg
                 viewBox={`0 0 ${WIDTH} ${height}`}
                 // 100% rather than a fixed width, so the chart never props its card

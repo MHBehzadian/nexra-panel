@@ -5,34 +5,55 @@ import { Button } from '@/components/ui/button'
 import { BarChart } from '@/components/charts/BarChart'
 import { analyticsAPI } from '@/lib/api'
 import { getUserRole } from '@/lib/auth'
-import { formatTraffic } from '@/lib/traffic-converter'
 import { cn } from '@/lib/utils'
 import { AdminAnalytics, AnalyticsNodePeriod } from '@/types'
 
 const NODE_PERIODS: { value: AnalyticsNodePeriod; label: string }[] = [
-    { value: '1d', label: '24h' },
-    { value: '7d', label: '7d' },
-    { value: '30d', label: '30d' },
+    { value: '1d', label: '۲۴ ساعت' },
+    { value: '7d', label: '۷ روز' },
+    { value: '30d', label: '۳۰ روز' },
 ]
 
 // Silent refresh; the usage behind it only moves with each Marzban sync.
 const POLL_MS = 60_000
+
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹'
+
+/** Latin digits to Persian, for numbers inside Persian text. */
+function fa(value: string | number): string {
+    return String(value).replace(/\d/g, (d) => FA_DIGITS[Number(d)])
+}
+
+const FA_UNITS = ['بایت', 'کیلوبایت', 'مگ', 'گیگ', 'ترابایت']
+
+/** "38.5 GB" -> "۳۸٫۵ گیگ". Negative values keep their sign. */
+function traffic(bytes: number): string {
+    if (!bytes) return '۰'
+    if (bytes < 0) return `-${traffic(-bytes)}`
+    const i = Math.min(FA_UNITS.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
+    const value = parseFloat((bytes / Math.pow(1024, i)).toFixed(2))
+    return `${fa(String(value).replace('.', '٫'))} ${FA_UNITS[i]}`
+}
 
 /** Backend timestamps are naive UTC. */
 function parseUtc(iso: string): Date {
     return new Date(iso.endsWith('Z') ? iso : `${iso}Z`)
 }
 
-/** "2026-11-16" (already a local date) -> "Mon 16". */
+/** "2026-11-16" (already a local date) -> "۲۵ آبان", or with the weekday. */
 function dayLabel(date: string, long = false): string {
     const d = new Date(`${date}T00:00:00`)
-    return d.toLocaleDateString('en-US', long ? { weekday: 'long', month: 'short', day: 'numeric' } : { weekday: 'short', day: 'numeric' })
+    return d.toLocaleDateString(
+        'fa-IR',
+        long ? { weekday: 'long', day: 'numeric', month: 'long' } : { day: 'numeric', month: 'short' }
+    )
 }
 
 function changeText(today: number, yesterday: number): string {
-    if (yesterday <= 0) return today > 0 ? 'Nothing used yesterday' : 'No usage yet'
+    if (yesterday <= 0) return today > 0 ? 'دیروز مصرفی نداشتید' : 'هنوز مصرفی ثبت نشده'
     const pct = Math.round(((today - yesterday) / yesterday) * 100)
-    return `${pct >= 0 ? '+' : ''}${pct}% vs yesterday (${formatTraffic(yesterday)})`
+    if (pct === 0) return `هم‌اندازه‌ی دیروز (${traffic(yesterday)})`
+    return `${fa(Math.abs(pct))}٪ ${pct > 0 ? 'بیشتر' : 'کمتر'} از کل دیروز (${traffic(yesterday)})`
 }
 
 function StatCard({
@@ -40,12 +61,15 @@ function StatCard({
     icon: Icon,
     value,
     caption,
+    hint,
     valueClass,
 }: {
     title: string
     icon: typeof Activity
     value: string
     caption: string
+    /** What the number means, in plain words. */
+    hint: string
     valueClass?: string
 }): JSX.Element {
     return (
@@ -54,42 +78,52 @@ function StatCard({
                 <CardTitle className="text-sm font-medium">{title}</CardTitle>
                 <Icon className="h-4 w-4 text-primary" />
             </CardHeader>
-            <CardContent>
-                <div className={cn('text-2xl font-bold tabular-nums', valueClass)}>{value}</div>
+            <CardContent className="space-y-1">
+                <div className={cn('text-2xl font-bold', valueClass)}>{value}</div>
                 <p className="text-xs text-muted-foreground">{caption}</p>
+                <p className="border-t pt-2 text-xs leading-5 text-muted-foreground/80">{hint}</p>
             </CardContent>
         </Card>
     )
 }
 
 function RunwayCard({ data }: { data: AdminAnalytics }): JSX.Element {
-    const { days_left, runs_out_at } = data.sales
+    const { days_left, runs_out_at, window_days } = data.sales
     let value: string
     let caption: string
     let tone: string | undefined
     if (data.remaining <= 0) {
-        value = 'Out of traffic'
-        caption = 'Your balance is used up'
+        value = 'تمام شده'
+        caption = 'حجم شما به پایان رسیده'
         tone = 'text-destructive'
     } else if (days_left === null) {
         value = '—'
-        caption = `No sales in the last ${data.sales.window_days} days`
+        caption = `در ${fa(window_days)} روز گذشته فروشی نداشتید، پس حجمتان فعلاً کم نمی‌شود`
     } else {
-        value = days_left < 1 ? '< 1 day' : `${Math.floor(days_left)} days`
+        value = days_left < 1 ? 'کمتر از ۱ روز' : `${fa(Math.floor(days_left))} روز دیگر`
         caption = runs_out_at
-            ? `Around ${parseUtc(runs_out_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at this pace`
-            : 'At this pace'
+            ? `حدود ${parseUtc(runs_out_at).toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long' })}`
+            : 'با همین روند فروش'
         tone = days_left < 3 ? 'text-destructive' : days_left < 7 ? 'text-amber-500' : undefined
     }
-    return <StatCard title="Traffic runs out in" icon={CalendarClock} value={value} caption={caption} valueClass={tone} />
+    return (
+        <StatCard
+            title="حجم شما تمام می‌شود در"
+            icon={CalendarClock}
+            value={value}
+            caption={caption}
+            hint={`حجم باقی‌مانده‌ی شما (${traffic(data.remaining)}) تقسیم بر میانگین فروش روزانه؛ یعنی اگر مثل ${fa(window_days)} روز گذشته بفروشید، کی باید حجم بخرید.`}
+            valueClass={tone}
+        />
+    )
 }
 
 function NodeRanking({ nodes }: { nodes: AdminAnalytics['nodes'] }): JSX.Element {
     if (nodes.items === null) {
-        return <p className="py-6 text-center text-sm text-muted-foreground">Marzban couldn't be reached. Try again in a moment.</p>
+        return <p className="py-6 text-center text-sm text-muted-foreground">ارتباط با سرور برقرار نشد؛ کمی بعد دوباره امتحان کنید.</p>
     }
     if (nodes.items.length === 0) {
-        return <p className="py-6 text-center text-sm text-muted-foreground">Your users haven't used any node in this period.</p>
+        return <p className="py-6 text-center text-sm text-muted-foreground">کاربران شما در این بازه از هیچ سروری استفاده نکرده‌اند.</p>
     }
     const top = nodes.items[0].used
     return (
@@ -100,13 +134,13 @@ function NodeRanking({ nodes }: { nodes: AdminAnalytics['nodes'] }): JSX.Element
                     <li key={`${node.id ?? 'master'}-${node.name}`} className="space-y-1.5">
                         <div className="flex items-baseline justify-between gap-3 text-sm">
                             <span className="min-w-0 truncate font-medium">
-                                <span className="mr-2 text-muted-foreground tabular-nums">{i + 1}.</span>
+                                <span className="ml-2 text-muted-foreground">{fa(i + 1)}.</span>
                                 {node.name}
                             </span>
-                            <span className="shrink-0 tabular-nums text-muted-foreground">
-                                <span className="font-semibold text-foreground">{formatTraffic(node.used)}</span>
+                            <span className="shrink-0 text-muted-foreground">
+                                <span className="font-semibold text-foreground">{traffic(node.used)}</span>
                                 {' · '}
-                                {share < 1 ? '<1' : Math.round(share)}%
+                                {share < 1 ? 'کمتر از ۱' : fa(Math.round(share))}٪
                             </span>
                         </div>
                         <div className="h-2 w-full rounded-full bg-muted">
@@ -136,8 +170,8 @@ export function AnalyticsPage(): JSX.Element {
             try {
                 setData(await analyticsAPI.get(nodePeriod))
                 setError(null)
-            } catch (e) {
-                if (!silent) setError(e instanceof Error ? e.message : 'Failed to load analytics')
+            } catch {
+                if (!silent) setError('دریافت اطلاعات ناموفق بود؛ دوباره امتحان کنید.')
             } finally {
                 setLoading(false)
                 setRefreshing(false)
@@ -155,8 +189,8 @@ export function AnalyticsPage(): JSX.Element {
 
     if (role !== 'admin') {
         return (
-            <div className="p-4 md:p-6">
-                <p className="text-muted-foreground">Analytics is available to admins.</p>
+            <div dir="rtl" className="p-4 md:p-6">
+                <p className="text-muted-foreground">این صفحه مخصوص ادمین‌هاست.</p>
             </div>
         )
     }
@@ -167,15 +201,17 @@ export function AnalyticsPage(): JSX.Element {
     const shortHistory = !recordingSince || Date.now() - recordingSince.getTime() < 24 * 3600 * 1000
 
     return (
-        <div className="space-y-6 p-4 md:p-6 max-w-full overflow-x-hidden">
+        <div dir="rtl" className="space-y-6 p-4 md:p-6 max-w-full overflow-x-hidden">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Analytics</h1>
-                    <p className="text-muted-foreground">Your users' usage and your sales</p>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">آنالیز</h1>
+                    <p className="text-muted-foreground">
+                        مصرف کاربران شما، میزان فروشتان و پیش‌بینی اینکه حجمتان کی تمام می‌شود
+                    </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => load(false)} disabled={refreshing}>
-                    <RefreshCw className={cn('h-4 w-4 mr-2', refreshing && 'animate-spin')} />
-                    {refreshing ? 'Refreshing...' : 'Refresh'}
+                    <RefreshCw className={cn('h-4 w-4 ml-2', refreshing && 'animate-spin')} />
+                    {refreshing ? 'در حال به‌روزرسانی...' : 'به‌روزرسانی'}
                 </Button>
             </div>
 
@@ -183,59 +219,63 @@ export function AnalyticsPage(): JSX.Element {
                 <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive border border-destructive/20">{error}</div>
             )}
 
-            {loading && !data && <p className="text-sm text-muted-foreground">Loading...</p>}
+            {loading && !data && <p className="text-sm text-muted-foreground">در حال بارگذاری...</p>}
 
             {data && usage && sales && (
                 <>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <StatCard
-                            title="Used today"
+                            title="مصرف امروز"
                             icon={Activity}
-                            value={formatTraffic(usage.today)}
+                            value={traffic(usage.today)}
                             caption={changeText(usage.today, usage.yesterday)}
+                            hint="مجموع حجمی که همه‌ی کاربران شما از ساعت ۰۰:۰۰ امروز مصرف کرده‌اند."
                         />
                         <StatCard
-                            title="Sold per day"
+                            title="میانگین فروش روزانه"
                             icon={ShoppingCart}
-                            value={formatTraffic(sales.per_day)}
-                            caption={`Average of the last ${sales.window_days} days`}
+                            value={traffic(sales.per_day)}
+                            caption={`میانگین ${fa(sales.window_days)} روز گذشته`}
+                            hint="حجمی که هر روز به‌طور میانگین فروخته‌اید: ساخت کاربر جدید، تمدید و افزایش حجم، منهای حجم‌هایی که برگشت خورده."
                         />
                         <StatCard
-                            title="Expected sales tomorrow"
+                            title="پیش‌بینی فروش فردا"
                             icon={TrendingUp}
-                            value={formatTraffic(sales.tomorrow)}
-                            caption="Volume of the users you'll likely create"
+                            value={traffic(sales.tomorrow)}
+                            caption="حجم کاربرانی که احتمالاً فردا می‌سازید"
+                            hint={`اگر فردا هم مثل ${fa(sales.window_days)} روز گذشته بفروشید، حدوداً این مقدار از حجم شما کم می‌شود.`}
                         />
                         <RunwayCard data={data} />
                     </div>
 
                     {sales.days_covered < sales.window_days && (
                         <p className="text-xs text-muted-foreground">
-                            Sales history covers {sales.days_covered} of {sales.window_days} days so far, so the
-                            estimates will settle as it fills in.
+                            سابقه‌ی فروش فعلاً {fa(sales.days_covered)} روز از {fa(sales.window_days)} روز را پوشش
+                            می‌دهد؛ با جمع شدن اطلاعات، پیش‌بینی‌ها دقیق‌تر می‌شوند.
                         </p>
                     )}
 
                     <Card>
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-base">Usage — last 24 hours</CardTitle>
-                            <p className="text-xs text-muted-foreground">
+                            <CardTitle className="text-base">مصرف ساعت به ساعت — ۲۴ ساعت گذشته</CardTitle>
+                            <p className="text-xs leading-5 text-muted-foreground">
                                 {shortHistory
                                     ? recordingSince
-                                        ? `Recording since ${recordingSince.toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}`
-                                        : 'Recording starts with the next sync of your users'
-                                    : 'All your users together, per hour'}
+                                        ? `ثبت مصرف از ${recordingSince.toLocaleString('fa-IR', { hour: '2-digit', minute: '2-digit', month: 'long', day: 'numeric' })} شروع شده است.`
+                                        : 'ثبت مصرف با همگام‌سازی بعدی کاربران شروع می‌شود (حداکثر ۱۰ دقیقه).'
+                                    : 'مصرف همه‌ی کاربران شما در هر ساعت؛ نشان می‌دهد کاربرانتان بیشتر چه ساعت‌هایی از سرویس استفاده می‌کنند.'}{' '}
+                                ستون کم‌رنگ، ساعت جاری است که هنوز تمام نشده.
                             </p>
                         </CardHeader>
                         <CardContent>
                             <BarChart
                                 data={usage.hourly.map((h, i) => ({
-                                    label: h.label,
-                                    title: `${h.label} – ${String((Number(h.label.slice(0, 2)) + 1) % 24).padStart(2, '0')}:00`,
+                                    label: fa(h.label),
+                                    title: `ساعت ${fa(h.label)} تا ${fa(String((Number(h.label.slice(0, 2)) + 1) % 24).padStart(2, '0'))}:۰۰`,
                                     value: h.used,
                                     muted: i === usage.hourly.length - 1,
                                 }))}
-                                format={formatTraffic}
+                                format={traffic}
                                 labelEvery={3}
                             />
                         </CardContent>
@@ -244,8 +284,10 @@ export function AnalyticsPage(): JSX.Element {
                     <div className="grid gap-4 lg:grid-cols-2">
                         <Card>
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-base">Usage — last 7 days</CardTitle>
-                                <p className="text-xs text-muted-foreground">Today is still running</p>
+                                <CardTitle className="text-base">مصرف روزانه — ۷ روز گذشته</CardTitle>
+                                <p className="text-xs leading-5 text-muted-foreground">
+                                    مجموع مصرف کاربران شما در هر روز. ستون کم‌رنگ امروز است که هنوز تمام نشده.
+                                </p>
                             </CardHeader>
                             <CardContent>
                                 <BarChart
@@ -255,7 +297,7 @@ export function AnalyticsPage(): JSX.Element {
                                         value: d.used,
                                         muted: i === usage.daily.length - 1,
                                     }))}
-                                    format={formatTraffic}
+                                    format={traffic}
                                     height={220}
                                 />
                             </CardContent>
@@ -263,8 +305,11 @@ export function AnalyticsPage(): JSX.Element {
 
                         <Card>
                             <CardHeader className="pb-2">
-                                <CardTitle className="text-base">Sales — last 7 days</CardTitle>
-                                <p className="text-xs text-muted-foreground">Traffic charged for new, upgraded and reset users, minus refunds</p>
+                                <CardTitle className="text-base">فروش روزانه — ۷ روز گذشته</CardTitle>
+                                <p className="text-xs leading-5 text-muted-foreground">
+                                    حجمی که هر روز برای ساخت، تمدید یا افزایش حجم کاربران از حساب شما کم شده، منهای
+                                    حجم برگشتی. پیش‌بینی‌های بالا از روی همین نمودار حساب می‌شوند.
+                                </p>
                             </CardHeader>
                             <CardContent>
                                 <BarChart
@@ -274,7 +319,7 @@ export function AnalyticsPage(): JSX.Element {
                                         value: d.sold,
                                         muted: i === sales.daily.length - 1,
                                     }))}
-                                    format={formatTraffic}
+                                    format={traffic}
                                     height={220}
                                     color="hsl(var(--brand-green))"
                                 />
@@ -285,8 +330,10 @@ export function AnalyticsPage(): JSX.Element {
                     <Card>
                         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 pb-4">
                             <div>
-                                <CardTitle className="text-base">Most used nodes</CardTitle>
-                                <p className="text-xs text-muted-foreground">Where your users' traffic goes, most first</p>
+                                <CardTitle className="text-base">پرمصرف‌ترین سرورها</CardTitle>
+                                <p className="text-xs leading-5 text-muted-foreground">
+                                    کاربران شما بیشتر از کدام سرور (لوکیشن) استفاده می‌کنند، به ترتیب مصرف.
+                                </p>
                             </div>
                             <div className="flex rounded-md border p-0.5">
                                 {NODE_PERIODS.map((p) => (
