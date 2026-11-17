@@ -112,6 +112,13 @@ class BotGrantInput(BaseModel):
     added_gb: float = Field(gt=0)
 
 
+class BotDeductInput(BaseModel):
+    """Superadmin taking traffic back from a panel, by username."""
+
+    username: str
+    removed_gb: float = Field(gt=0)
+
+
 class ServerInput(BaseModel):
     name: str = Field(min_length=1)
 
