@@ -178,6 +178,30 @@ def grant_admin_traffic(db: Session, admin: Admins, added_traffic) -> None:
     db.commit()
 
 
+def deduct_admin_traffic(db: Session, admin: Admins, removed_traffic: int) -> bool:
+    """Take quota back from an admin — the reverse of grant_admin_traffic, so
+    initial_traffic shrinks along with what is left.
+
+    Only from traffic the admin still has: the check and the change are one
+    UPDATE, so traffic used in between can't push the balance below zero.
+    Returns False (and changes nothing) when not that much is left.
+    """
+    changed = (
+        db.query(Admins)
+        .filter(Admins.id == admin.id, Admins.traffic >= removed_traffic)
+        .update(
+            {
+                Admins.traffic: Admins.traffic - removed_traffic,
+                Admins.initial_traffic: Admins.initial_traffic - removed_traffic,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    db.refresh(admin)
+    return bool(changed)
+
+
 def set_suspended_reason(db: Session, admin: Admins, reason: str | None) -> None:
     admin.suspended_reason = reason
     db.commit()

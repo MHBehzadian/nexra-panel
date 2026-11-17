@@ -11,6 +11,7 @@ from backend.schema._input import (
     AdminInput,
     BotChangePasswordInput,
     BotCreateAdminInput,
+    BotDeductInput,
     BotGrantInput,
     BotSuspensionInput,
     BotTopupInput,
@@ -217,6 +218,44 @@ async def grant_admin_traffic(
             content={"success": False, "message": "No admin with that username"},
         )
     return _credit(db, admin, payload.added_gb, "Superadmin grant")
+
+
+@router.post(
+    "/admin/deduct",
+    description="Superadmin takes traffic back from a panel by username",
+)
+async def deduct_admin_traffic(
+    payload: BotDeductInput,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_bot_api_key),
+):
+    admin = crud.get_admin_by_username(db, payload.username)
+    if not admin:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"success": False, "message": "No admin with that username"},
+        )
+    removed_bytes = int(payload.removed_gb * 1024**3)
+    if not crud.deduct_admin_traffic(db, admin, removed_bytes):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "success": False,
+                "message": f"Only {admin.traffic / 1024**3:.2f} GB left on this panel",
+            },
+        )
+    logger.info(f"Superadmin deduct: admin {admin.username} lost {payload.removed_gb} GB")
+    return ResponseModel(
+        success=True,
+        message="Traffic decreased successfully",
+        data={
+            "username": admin.username,
+            "telegram_id": admin.telegram_id,
+            "removed_gb": payload.removed_gb,
+            "new_traffic_bytes": admin.traffic,
+            "new_initial_traffic_bytes": admin.initial_traffic,
+        },
+    )
 
 
 @router.post(
