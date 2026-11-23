@@ -19,6 +19,7 @@ class AdminInput(BaseModel):
     telegram_id: Optional[int] = None
     white_label: bool = False
     parent_id: Optional[int] = None
+    can_create_subpanels: bool = False
 
 
 class AdminUpdateInput(BaseModel):
@@ -42,6 +43,8 @@ class AdminUpdateInput(BaseModel):
     # None leaves it as it is, so an older form that doesn't send it can't
     # quietly put Nexra's name back on a reseller's white-label panel.
     white_label: Optional[bool] = None
+    # None leaves it as it is, like white_label.
+    can_create_subpanels: Optional[bool] = None
 
 
 class PanelInput(BaseModel):

@@ -103,6 +103,10 @@ export const adminSchema = z.object({
     white_label: z
         .boolean()
         .default(false),
+
+    can_create_subpanels: z
+        .boolean()
+        .default(false),
 })
     .superRefine((val, ctx) => {
         // If panel is 3x-ui, flow must be provided (not null/empty)
@@ -137,6 +141,8 @@ export interface AdminOutput {
     white_label?: boolean
     // The panel this one was made from, when a reseller made it in the bot.
     parent_id?: number | null
+    // May make panels for colleagues from the top-up bot.
+    can_create_subpanels?: boolean
 }
 
 // Panel Form

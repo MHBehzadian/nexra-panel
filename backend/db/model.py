@@ -39,6 +39,9 @@ class Admins(Base):
     # nothing of Nexra — no name or logo, no Finance or Support links, no
     # announcements — so its admin has no way back to us around the reseller.
     white_label = Column(Boolean, default=False, nullable=False, server_default="0")
+    # Whether this admin may make panels for colleagues from the bot (on this
+    # panel's server). Off until the superadmin turns it on per admin.
+    can_create_subpanels = Column(Boolean, default=False, nullable=False, server_default="0")
 
 
 class Panels(Base):

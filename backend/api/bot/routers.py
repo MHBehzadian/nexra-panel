@@ -425,6 +425,11 @@ async def create_sub_admin(
     if error:
         return error
 
+    # Turned on per admin by the superadmin, in the panel's admin form.
+    if not source.can_create_subpanels:
+        return _error(
+            status.HTTP_403_FORBIDDEN, "Creating panels is not enabled for this admin"
+        )
     # A reseller whose own panel is locked or expired can't open new ones
     # meanwhile; a lock would otherwise be sidestepped by starting afresh.
     if source.suspended_reason or not source.is_active:

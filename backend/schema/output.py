@@ -25,6 +25,7 @@ class AdminOutput(BaseModel):
     suspended_reason: Optional[str] = None
     white_label: bool = False
     parent_id: Optional[int] = None
+    can_create_subpanels: bool = False
 
     class Config:
         from_attributes = True
