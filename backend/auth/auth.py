@@ -32,7 +32,11 @@ SUSPENDED_MESSAGES = {
 SUSPENDED_DEFAULT_MESSAGE = "Your panel has been suspended. Contact support."
 
 
-def suspended_message(reason: str) -> str:
+def suspended_message(reason: str, white_label: bool = False) -> str:
+    # A white-label panel's admin doesn't know our bot exists; "pay it in the
+    # bot" would send them looking for it. Their support is the reseller.
+    if white_label:
+        return SUSPENDED_DEFAULT_MESSAGE
     return SUSPENDED_MESSAGES.get(reason, SUSPENDED_DEFAULT_MESSAGE)
 
 
@@ -55,7 +59,7 @@ def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends
             if admin and admin.suspended_reason:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail=suspended_message(admin.suspended_reason),
+                    detail=suspended_message(admin.suspended_reason, bool(admin.white_label)),
                 )
 
         return {
@@ -122,7 +126,10 @@ async def login_for_access_token(
         logger.warning(f"Login refused for suspended admin: {admin.username}")
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
-            content={"success": False, "message": suspended_message(admin.suspended_reason)},
+            content={
+                "success": False,
+                "message": suspended_message(admin.suspended_reason, bool(admin.white_label)),
+            },
         )
     if not admin or not verify_password(form_data.password, admin.hashed_password):
         logger.warning(f"Failed login attempt for username: {form_data.username}")
@@ -133,7 +140,15 @@ async def login_for_access_token(
 
     logger.info(f"Admin login successful: {admin.username}")
     access_token = create_access_token(
-        data={"sub": admin.username, "role": "admin", "panel": admin.panel}
+        data={
+            "sub": admin.username,
+            "role": "admin",
+            "panel": admin.panel,
+            # Read by the UI to leave out everything that names Nexra. Also
+            # sent with the dashboard data, which wins once it has loaded, so a
+            # change made while a session is open still takes effect.
+            "white_label": bool(admin.white_label),
+        }
     )
     return JSONResponse(
         status_code=status.HTTP_200_OK,

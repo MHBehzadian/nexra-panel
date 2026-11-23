@@ -354,7 +354,12 @@ function toExpiryTimestamp(expiryDatetime: string | number | null | undefined): 
 
 // User API
 export const userAPI = {
-    createUser: async (email: string, totalGb: number, expiryDatetime?: string | number | null): Promise<ClientsOutput> => {
+    createUser: async (
+        email: string,
+        totalGb: number,
+        expiryDatetime?: string | number | null,
+        note?: string
+    ): Promise<ClientsOutput> => {
         const submitData = {
             email,
             id: uuidv4(),
@@ -363,6 +368,7 @@ export const userAPI = {
             total: Math.round(totalGb * 1024 * 1024 * 1024),
             sub_id: generateSubId(),
             flow: '',
+            ...(note !== undefined ? { note } : {}),
         }
 
         const response = await api.post<ResponseModel<ClientsOutput>>(`/admin/user`, submitData)
@@ -382,7 +388,9 @@ export const userAPI = {
         subId: string,
         enable: boolean = true,
         flow: string = '',
-        userId?: string
+        userId?: string,
+        // Left out, the note stays as it is on the panel; '' clears it.
+        note?: string
     ): Promise<ClientsOutput> => {
         // Sanitize sub_id to remove leading and trailing slashes to prevent double slashes in subscription URL
         const sanitizedSubId = subId?.replace(/^\/+|\/+$/g, '') || '';
@@ -394,6 +402,7 @@ export const userAPI = {
             total: Math.round(totalGb * 1024 * 1024 * 1024),
             sub_id: sanitizedSubId,
             flow,
+            ...(note !== undefined ? { note } : {}),
         }
 
         const identifier = (userUuid && userUuid !== '0') ? userUuid : (userId || '0')

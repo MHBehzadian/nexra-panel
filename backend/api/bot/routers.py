@@ -11,6 +11,7 @@ from backend.schema._input import (
     AdminInput,
     BotChangePasswordInput,
     BotCreateAdminInput,
+    BotCreateSubAdminInput,
     BotDeductInput,
     BotGrantInput,
     BotSuspensionInput,
@@ -258,6 +259,117 @@ async def deduct_admin_traffic(
     )
 
 
+def _error(code: int, message: str) -> JSONResponse:
+    return JSONResponse(status_code=code, content={"success": False, "message": message})
+
+
+async def _provision_admin(
+    db: Session,
+    *,
+    username: str,
+    password: str,
+    panel_name: str,
+    traffic_bytes: int,
+    expiry_date: datetime | None,
+    telegram_id: int | None,
+    marzban_inbounds: str | None = None,
+    flow: str | None = None,
+    update_return_traffic: bool = True,
+    delete_return_traffic: bool = True,
+    white_label: bool = False,
+    parent_id: int | None = None,
+):
+    """Create an admin in Marzban, then in Nexra.
+
+    Returns (inbounds, error_response) — exactly one of the two is set.
+    `marzban_inbounds` (JSON, as stored on an admin) is used as given; left
+    out, the new admin gets every inbound the panel offers.
+    """
+    if crud.get_admin_by_username(db, username):
+        return None, _error(status.HTTP_409_CONFLICT, "An admin with that username already exists")
+
+    panel = crud.get_panel_by_name(db, panel_name)
+    if not panel:
+        return None, _error(status.HTTP_404_NOT_FOUND, f"No panel named '{panel_name}'")
+    if panel.panel_type != "marzban":
+        return None, _error(status.HTTP_400_BAD_REQUEST, "Only Marzban panels can be provisioned here")
+
+    sudo_api = MarzbanAPI(url=panel.url, username=panel.username, password=panel.password)
+
+    inbounds = None
+    if marzban_inbounds:
+        try:
+            inbounds = json.loads(marzban_inbounds) or None
+        except (json.JSONDecodeError, TypeError):
+            inbounds = None
+
+    # Read the inbounds before creating anything. An admin stored without them
+    # can log in and make users, but those users carry no proxies at all — a
+    # panel that exists and does nothing, which is worse than a clean failure.
+    if not inbounds:
+        try:
+            inbounds = await sudo_api.get_inbounds()
+        except Exception as e:
+            logger.error(f"Could not read inbounds from panel {panel.name}: {e}")
+            return None, _error(
+                status.HTTP_502_BAD_GATEWAY, f"Could not read the panel's inbounds: {e}"
+            )
+
+    if not inbounds:
+        logger.error(f"Panel {panel.name} reported no inbounds; refusing to create an admin")
+        return None, _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "Marzban returned no inbounds for this panel, so the new admin's users "
+            "would have no configuration. Check the panel's inbounds and try again.",
+        )
+
+    # Create in Marzban next. If Nexra's row were written first and Marzban then
+    # refused, the panel would list an admin that cannot actually serve anyone.
+    try:
+        marzban_status, detail = await sudo_api.create_admin(username, password, telegram_id)
+    except Exception as e:
+        logger.error(f"Marzban admin creation failed for {username}: {e}")
+        return None, _error(status.HTTP_502_BAD_GATEWAY, f"Could not reach Marzban: {e}")
+
+    if marzban_status != 200:
+        return None, _error(
+            status.HTTP_502_BAD_GATEWAY,
+            f"Marzban refused to create the admin (status {marzban_status}). {detail}",
+        )
+
+    admin_input = AdminInput(
+        username=username,
+        password=password,
+        is_active=True,
+        panel=panel_name,
+        inbound_id=None,
+        flow=flow,
+        marzban_inbounds=json.dumps(inbounds),
+        marzban_password=password,
+        traffic=traffic_bytes,
+        update_return_traffic=update_return_traffic,
+        delete_return_traffic=delete_return_traffic,
+        expiry_date=expiry_date,
+        telegram_id=telegram_id,
+        white_label=white_label,
+        parent_id=parent_id,
+    )
+    # Marzban already has the admin at this point; if Nexra's own row fails to
+    # write, say so plainly rather than reporting a clean failure the caller
+    # would retry into a duplicate-username error.
+    try:
+        crud.add_admin(db, admin_input)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Nexra record failed for {username} after Marzban creation: {e}")
+        return None, _error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            f"The admin was created in Marzban but could not be saved in Nexra: {e}. "
+            "Add it manually in the panel, or delete it from Marzban and try again.",
+        )
+    return inbounds, None
+
+
 @router.post(
     "/admin/create",
     description="Provision a new reseller: create the admin in Marzban, then in Nexra",
@@ -267,114 +379,24 @@ async def create_admin(
     db: Session = Depends(get_db),
     _: None = Depends(verify_bot_api_key),
 ):
-    if crud.get_admin_by_username(db, payload.username):
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={"success": False, "message": "An admin with that username already exists"},
-        )
-
-    panel = crud.get_panel_by_name(db, payload.panel)
-    if not panel:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"success": False, "message": f"No panel named '{payload.panel}'"},
-        )
-    if panel.panel_type != "marzban":
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"success": False, "message": "Only Marzban panels can be provisioned here"},
-        )
-
-    sudo_api = MarzbanAPI(url=panel.url, username=panel.username, password=panel.password)
-
-    # Read the inbounds before creating anything. An admin stored without them
-    # can log in and make users, but those users carry no proxies at all — a
-    # panel that exists and does nothing, which is worse than a clean failure.
-    try:
-        inbounds = await sudo_api.get_inbounds()
-    except Exception as e:
-        logger.error(f"Could not read inbounds from panel {panel.name}: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            content={"success": False, "message": f"Could not read the panel's inbounds: {e}"},
-        )
-
-    if not inbounds:
-        logger.error(f"Panel {panel.name} reported no inbounds; refusing to create an admin")
-        return JSONResponse(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            content={
-                "success": False,
-                "message": (
-                    "Marzban returned no inbounds for this panel, so the new admin's users "
-                    "would have no configuration. Check the panel's inbounds and try again."
-                ),
-            },
-        )
-
-    # Create in Marzban next. If Nexra's row were written first and Marzban then
-    # refused, the panel would list an admin that cannot actually serve anyone.
-    try:
-        marzban_status, detail = await sudo_api.create_admin(
-            payload.username, payload.password, payload.telegram_id
-        )
-    except Exception as e:
-        logger.error(f"Marzban admin creation failed for {payload.username}: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            content={"success": False, "message": f"Could not reach Marzban: {e}"},
-        )
-
-    if marzban_status != 200:
-        return JSONResponse(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            content={
-                "success": False,
-                "message": f"Marzban refused to create the admin (status {marzban_status}). {detail}",
-            },
-        )
-
-    # Every inbound the panel offers; the superadmin can narrow it afterwards
-    # in the panel UI.
     expiry_date = None
     if payload.expiry_days:
         expiry_date = datetime.utcnow() + timedelta(days=payload.expiry_days)
 
-    admin_input = AdminInput(
+    # Every inbound the panel offers; the superadmin can narrow it afterwards
+    # in the panel UI. Lowering a user's limit or deleting the user gives the
+    # unused traffic back, as resellers expect.
+    inbounds, error = await _provision_admin(
+        db,
         username=payload.username,
         password=payload.password,
-        is_active=True,
-        panel=payload.panel,
-        inbound_id=None,
-        flow=None,
-        marzban_inbounds=json.dumps(inbounds),
-        marzban_password=payload.password,
-        traffic=int(payload.traffic_gb * 1024**3),
-        # Lowering a user's limit or deleting the user gives the unused traffic
-        # back, as resellers expect.
-        update_return_traffic=True,
-        delete_return_traffic=True,
+        panel_name=payload.panel,
+        traffic_bytes=int(payload.traffic_gb * 1024**3),
         expiry_date=expiry_date,
         telegram_id=payload.telegram_id,
     )
-    # Marzban already has the admin at this point; if Nexra's own row fails to
-    # write, say so plainly rather than reporting a clean failure the superadmin
-    # would retry into a duplicate-username error.
-    try:
-        crud.add_admin(db, admin_input)
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Nexra record failed for {payload.username} after Marzban creation: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "success": False,
-                "message": (
-                    f"The admin was created in Marzban but could not be saved in Nexra: {e}. "
-                    "Add it manually in the panel, or delete it from Marzban and try again."
-                ),
-            },
-        )
+    if error:
+        return error
 
     logger.info(f"Bot provisioned new admin {payload.username} on panel {payload.panel}")
     return ResponseModel(
@@ -386,6 +408,82 @@ async def create_admin(
             "traffic_gb": payload.traffic_gb,
             "inbounds": inbounds,
             "expiry_date": expiry_date.isoformat() if expiry_date else None,
+        },
+    )
+
+
+@router.post(
+    "/admin/create-sub",
+    description="A reseller makes a panel for a colleague, out of one of their own panels' traffic",
+)
+async def create_sub_admin(
+    payload: BotCreateSubAdminInput,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_bot_api_key),
+):
+    source, error = _resolve_target(db, payload.telegram_id, payload.source_username)
+    if error:
+        return error
+
+    # Every way the source panel could be unable to sell is also a way it must
+    # not hand its traffic on: otherwise a lock or an expiry is undone by moving
+    # the balance into a fresh panel.
+    if source.suspended_reason or not source.is_active:
+        return _error(status.HTTP_403_FORBIDDEN, "This panel is suspended or inactive")
+    if source.expiry_date and source.expiry_date <= datetime.utcnow():
+        return _error(status.HTTP_403_FORBIDDEN, "This panel has expired")
+    if crud.get_admin_by_username(db, payload.username):
+        return _error(status.HTTP_409_CONFLICT, "An admin with that username already exists")
+
+    traffic_bytes = int(payload.traffic_gb * 1024**3)
+    # Taken first, in the one UPDATE that also checks the balance, so two
+    # requests at once can't both spend the same traffic. Given back below if
+    # the new panel can't be made.
+    if not crud.deduct_admin_traffic(db, source, traffic_bytes):
+        return _error(
+            status.HTTP_409_CONFLICT,
+            f"Only {source.traffic / 1024**3:.2f} GB left on this panel",
+        )
+
+    # The new panel inherits what the superadmin set on the one it came from:
+    # its inbounds, its expiry and how traffic is returned.
+    _, error = await _provision_admin(
+        db,
+        username=payload.username,
+        password=payload.password,
+        panel_name=source.panel,
+        traffic_bytes=traffic_bytes,
+        expiry_date=source.expiry_date,
+        telegram_id=source.telegram_id,
+        marzban_inbounds=source.marzban_inbounds,
+        flow=source.inbound_flow,
+        update_return_traffic=bool(source.update_return_traffic),
+        delete_return_traffic=bool(source.delete_return_traffic),
+        white_label=payload.white_label,
+        parent_id=source.id,
+    )
+    if error:
+        db.rollback()
+        crud.grant_admin_traffic(db, source, traffic_bytes)
+        db.refresh(source)
+        return error
+
+    db.refresh(source)
+    logger.info(
+        f"Reseller {source.username} made {'white-label ' if payload.white_label else ''}"
+        f"panel {payload.username} with {payload.traffic_gb} GB"
+    )
+    return ResponseModel(
+        success=True,
+        message="Admin created successfully",
+        data={
+            "username": payload.username,
+            "panel": source.panel,
+            "source_username": source.username,
+            "traffic_gb": payload.traffic_gb,
+            "source_traffic_bytes": source.traffic,
+            "white_label": payload.white_label,
+            "expiry_date": source.expiry_date.isoformat() if source.expiry_date else None,
         },
     )
 

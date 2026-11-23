@@ -6,6 +6,7 @@ import { userAPI } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
     Dialog,
     DialogContent,
@@ -22,6 +23,8 @@ interface UserFormDialogProps {
     onSuccess: () => void
     user?: ClientsOutput | null
     existingUsernames?: string[]
+    // Whether the admin's panel keeps a note per user (Marzban does).
+    supportsNote?: boolean
 }
 
 // Random username: 5 to 7 English digits, avoiding names already in use.
@@ -46,7 +49,7 @@ function generateRandomUsername(taken: Set<string>): string {
     return name
 }
 
-export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsernames = [] }: UserFormDialogProps): JSX.Element {
+export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsernames = [], supportsNote = false }: UserFormDialogProps): JSX.Element {
     const [serverError, setServerError] = useState<string | null>(null)
     // Expiry as it stands on the server, kept so an edit that doesn't touch the
     // days field re-sends the exact same timestamp instead of a rounded date.
@@ -66,6 +69,7 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
             email: '',
             totalGb: 30,
             expiryDatetime: 30,
+            note: '',
         },
     })
 
@@ -73,6 +77,7 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
         if (user) {
             setValue('email', user.username)
             setValue('totalGb', user.data_limit / (1024 ** 3))
+            setValue('note', user.note ?? '')
             if (user.expiry_date_unix) {
                 const exp = new Date(user.expiry_date_unix)
                 const today = new Date()
@@ -124,6 +129,15 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
                 expiryForSubmit = String(data.expiryDatetime)
             }
 
+            // Sent only where the panel keeps notes, and on an edit only when it
+            // changed, so saving never rewrites a note someone else just set.
+            const note = data.note ?? ''
+            const noteForSubmit = !supportsNote
+                ? undefined
+                : user
+                    ? (note.trim() === (user.note ?? '').trim() ? undefined : note.trim())
+                    : (note.trim() || undefined)
+
             if (user?.uuid || user?.username || user?.id) {
                 await userAPI.updateUser(
                     user.uuid || user.username || '0',
@@ -133,14 +147,16 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
                     user.sub_id || '',
                     user.status,
                     user.flow || '',
-                    user.id?.toString()
+                    user.id?.toString(),
+                    noteForSubmit
                 )
             } else {
                 // Create
                 await userAPI.createUser(
                     data.email,
                     data.totalGb,
-                    expiryForSubmit
+                    expiryForSubmit,
+                    noteForSubmit
                 )
             }
 
@@ -234,6 +250,26 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
                         )}
                         <p className="text-xs text-muted-foreground">Optional - Leave empty for no expiry</p>
                     </div>
+
+                    {/* Note - Marzban's own per-user note, the same one its dashboard shows */}
+                    {supportsNote && (
+                        <div className="space-y-2">
+                            <Label htmlFor="note">Note</Label>
+                            <Textarea
+                                id="note"
+                                dir="auto"
+                                rows={3}
+                                maxLength={500}
+                                placeholder="e.g. customer name, phone, payment…"
+                                disabled={isSubmitting}
+                                {...register('note')}
+                            />
+                            {errors.note && (
+                                <p className="text-sm text-destructive">{errors.note.message}</p>
+                            )}
+                            <p className="text-xs text-muted-foreground">Optional - Saved on the panel, visible in Marzban too</p>
+                        </div>
+                    )}
                 </form>
 
                 <DialogFooter className="gap-2 sm:gap-0">

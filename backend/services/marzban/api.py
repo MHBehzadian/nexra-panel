@@ -191,7 +191,7 @@ class APIService:
             "data_limit_reset_strategy": "no_reset",
             "inbounds": self.inbounds,
             "proxies": proxies,
-            "note": "",
+            "note": (user.note or "").strip(),
             "on_hold_expire_duration": 0,
             "on_hold_timeout": None,
         }
@@ -215,8 +215,11 @@ class APIService:
             "data_limit_reset_strategy": "no_reset",
             "proxies": {},
             "inbounds": {},
-            "note": "",
         }
+        # Marzban leaves a field it isn't sent as it is. This used to send ""
+        # every time, which wiped the note of any user edited through Nexra.
+        if user_data.note is not None:
+            update_data["note"] = user_data.note.strip()
 
         response = self.session.put(
             f"{self.url}api/user/{username}",

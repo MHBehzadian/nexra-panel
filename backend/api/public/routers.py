@@ -36,7 +36,9 @@ async def read_dashboard_data(
     if current_admin["role"] == "admin":
         admin_data = crud.get_admin_by_username(db, current_admin["username"])
         panel_data = crud.get_panel_by_name(db, admin_data.panel)
-        news_data = crud.get_news(db)
+        white_label = bool(admin_data.white_label)
+        # Announcements are written to our own resellers and talk about us.
+        news_data = [] if white_label else crud.get_news(db)
         _, users = await get_all_users_from_panel(
             admin_username=current_admin["username"], db=db
         )
@@ -57,6 +59,8 @@ async def read_dashboard_data(
                     for news in news_data
                 ],
                 "sub_url": panel_data.sub_url,
+                "panel_type": panel_data.panel_type,
+                "white_label": white_label,
                 "users": users,
             },
         )

@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { loginSchema, LoginFormData } from '@/types'
 import { authAPI, settingsAPI, getLogoUrl } from '@/lib/api'
-import { setToken, getDecodedToken, isTokenValid } from '@/lib/auth'
+import { setToken, getDecodedToken, isTokenValid, isWhiteLabelLogin, rememberLoginKind } from '@/lib/auth'
 import logo from '@/assets/logo.png'
 
 const styles = `
@@ -64,14 +64,22 @@ const styles = `
 export function LoginPage() {
     const navigate = useNavigate()
     const [serverError, setServerError] = useState<string | null>(null)
+    // The login link of a reseller's white-label panel (login?wl=1): the same
+    // page with no name, logo or mention of Nexra. The branding set in Settings
+    // is ours, so it isn't used here either.
+    const [whiteLabel] = useState(isWhiteLabelLogin)
     const [branding, setBranding] = useState<{ login_title: string; has_logo: boolean }>({
-        login_title: 'Nexra Panel',
+        login_title: whiteLabel ? 'your panel' : 'Nexra Panel',
         has_logo: false,
     })
 
     useEffect(() => {
+        if (whiteLabel) {
+            document.title = 'Panel'
+            return
+        }
         settingsAPI.getBranding().then(setBranding).catch(() => { })
-    }, [])
+    }, [whiteLabel])
 
     // Light only, whatever the saved theme is. index.html skips the class on a
     // direct hit; this covers arriving here from inside the app (logging out),
@@ -104,6 +112,7 @@ export function LoginPage() {
         try {
             const response = await authAPI.login(data.username, data.password)
             setToken(response.access_token)
+            rememberLoginKind()
             const decoded = getDecodedToken()
             if (decoded?.role) {
                 navigate('/', { replace: true })
@@ -125,9 +134,11 @@ export function LoginPage() {
             <main className="nx-card">
                 <div className="nx-brand"><span className="nx-dot" /> Panel Access</div>
 
-                <div className="nx-logo">
-                    <img src={branding.has_logo ? getLogoUrl() : logo} alt={branding.login_title} />
-                </div>
+                {!whiteLabel && (
+                    <div className="nx-logo">
+                        <img src={branding.has_logo ? getLogoUrl() : logo} alt={branding.login_title} />
+                    </div>
+                )}
 
                 <h1 className="nx-title">Sign in</h1>
                 <p className="nx-sub">Enter your credentials to access {branding.login_title}.</p>
@@ -172,7 +183,7 @@ export function LoginPage() {
 
                 <div className="nx-foot">
                     <span>Status · Ready</span>
-                    <span>Nexra</span>
+                    {!whiteLabel && <span>Nexra</span>}
                 </div>
             </main>
         </div>

@@ -17,6 +17,8 @@ class AdminInput(BaseModel):
     delete_return_traffic: bool = True
     expiry_date: datetime | None
     telegram_id: Optional[int] = None
+    white_label: bool = False
+    parent_id: Optional[int] = None
 
 
 class AdminUpdateInput(BaseModel):
@@ -37,6 +39,9 @@ class AdminUpdateInput(BaseModel):
     delete_return_traffic: bool = False
     expiry_date: datetime | None
     telegram_id: Optional[int] = None
+    # None leaves it as it is, so an older form that doesn't send it can't
+    # quietly put Nexra's name back on a reseller's white-label panel.
+    white_label: Optional[bool] = None
 
 
 class PanelInput(BaseModel):
@@ -60,6 +65,8 @@ class ClientInput(BaseModel):
     )
     sub_id: str
     flow: str = ""
+    # Marzban's free-text note on the user. Ignored by the other panel types.
+    note: Optional[str] = Field(default=None, max_length=500)
 
 
 class ClientUpdateInput(BaseModel):
@@ -69,6 +76,8 @@ class ClientUpdateInput(BaseModel):
     total: float = Field(ge=104857600, description="Minimum 0.1 GB (100 MB)")
     sub_id: str
     flow: str = ""
+    # None leaves the note as it is on Marzban; "" clears it.
+    note: Optional[str] = Field(default=None, max_length=500)
 
 
 class BotTopupInput(BaseModel):
@@ -102,6 +111,20 @@ class BotCreateAdminInput(BaseModel):
     traffic_gb: float = Field(ge=0)
     expiry_days: Optional[int] = None
     telegram_id: Optional[int] = None
+
+
+class BotCreateSubAdminInput(BaseModel):
+    """A reseller making a panel for a colleague of theirs, out of their own
+    panel's traffic. The new panel is theirs too (same Telegram account), so the
+    bot's top-ups, warnings and bills for it go to them, never to the colleague."""
+
+    telegram_id: int
+    # Which of their panels the traffic comes from; optional when they own one.
+    source_username: Optional[str] = None
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=6, max_length=64)
+    traffic_gb: float = Field(gt=0)
+    white_label: bool = False
 
 
 class BotGrantInput(BaseModel):
