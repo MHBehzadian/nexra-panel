@@ -75,11 +75,11 @@ function CountdownSlide({ endsAt }: { endsAt: string }) {
                 <span className="text-xs font-medium text-white/70 sm:text-sm">زمان باقی‌مانده</span>
                 {left ? (
                     <div className="flex items-start gap-1.5 sm:gap-3" dir="ltr">
-                        <Unit value={fa(left.minutes)} label="دقیقه" />
+                        <Unit value={fa(left.days)} label="روز" />
                         <Colon />
                         <Unit value={fa(left.hours)} label="ساعت" />
                         <Colon />
-                        <Unit value={fa(left.days)} label="روز" />
+                        <Unit value={fa(left.minutes)} label="دقیقه" />
                     </div>
                 ) : null}
                 <span className="text-sm font-black text-white sm:text-base md:text-lg">
