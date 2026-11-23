@@ -174,33 +174,20 @@
         background-attachment: fixed;
     }
 
-    /* The login page's diagonal OFF texture behind the whole panel, fainter
-       here since there is a page of content on top of it. The body is see-
-       through so this plane (fixed, under everything) shows between cards. */
+    /* Plain black with a faint red glow; the OFF texture is kept to the
+       dashboard's countdown banner, where it reads as decoration rather than
+       noise behind every table. The shell is see-through so the glow shows
+       between cards. */
     .festival.dark body {
-        background-color: transparent;
+        background-color: hsl(var(--background));
         background-image:
             radial-gradient(ellipse 70% 45% at 100% 110%, rgba(255, 45, 61, 0.1), transparent 65%),
             radial-gradient(ellipse 60% 40% at 0% -10%, rgba(255, 255, 255, 0.04), transparent 60%);
+        background-attachment: fixed;
     }
 
     .festival.dark .nx-shell {
         background-color: transparent;
-    }
-
-    .festival.dark body::before {
-        content: '';
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        width: 260vmax;
-        height: 260vmax;
-        transform: translate(-50%, -50%) rotate(-28deg);
-        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='150'><g font-family='Arial Black,Arial,Helvetica,sans-serif' font-weight='900' font-size='64' letter-spacing='4'><text x='6' y='62' fill='none' stroke='white' stroke-opacity='.085' stroke-width='1.4'>OFF</text><text x='156' y='137' fill='white' fill-opacity='.04'>OFF</text></g><text x='224' y='60' font-family='Arial Black,Arial,sans-serif' font-weight='900' font-size='40' fill='%23ff2d3d' fill-opacity='.14'>%25</text></svg>");
-        background-size: 300px 150px;
-        opacity: 0.55;
-        z-index: -1;
-        pointer-events: none;
     }
 }
 
