@@ -32,9 +32,11 @@ DEFAULTS = {
     "node_names": {},
     # The Black Friday festival: black login page and a countdown slider on
     # the dashboard in place of the news. festival_ends_at is an ISO time with
-    # its offset; once it has passed the festival switches itself off.
-    "festival_enabled": False,
-    "festival_ends_at": "",
+    # its offset; once it has passed the festival switches itself off. On
+    # out of the box for Black Friday 2026, ending as that Friday ends in
+    # Tehran; both can be changed in Settings.
+    "festival_enabled": True,
+    "festival_ends_at": "2026-11-27T23:59:00+03:30",
 }
 
 
