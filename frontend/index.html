@@ -22,16 +22,16 @@
             try {
                 // The login page is light only, so it never takes the class.
                 if (/\/login\/?$/.test(location.pathname)) return;
-                // During the Black Friday festival the panel is black by
-                // default, and the choice is kept apart from the usual one
-                // (see src/hooks/useTheme.ts).
+                // During the Black Friday festival the panel starts on light
+                // (dark is its black look), and the choice is kept apart from
+                // the usual one (see src/hooks/useTheme.ts).
                 var fest = JSON.parse(localStorage.getItem('nx-festival') || 'null');
                 var live = !!(fest && fest.active &&
                     (!fest.ends_at || !(Date.parse(fest.ends_at) <= Date.now())));
                 var saved = localStorage.getItem(live ? 'nx-festival-theme' : 'theme');
                 var dark = saved
                     ? saved === 'dark'
-                    : live || window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    : !live && window.matchMedia('(prefers-color-scheme: dark)').matches;
                 if (live) document.documentElement.classList.add('festival');
                 if (dark) document.documentElement.classList.add('dark');
             } catch (e) { }

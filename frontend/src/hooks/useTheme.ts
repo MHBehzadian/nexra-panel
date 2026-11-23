@@ -4,8 +4,8 @@ import { currentFestival, isFestivalLive } from '@/lib/festival'
 type Theme = 'light' | 'dark'
 
 // While the festival is on, the choice is kept under its own key: everyone
-// starts on the black festival look, and someone who picks light for it
-// still gets their usual theme back once it is over.
+// starts on light, the black festival look is there for whoever switches to
+// dark, and either way their usual theme comes back once it is over.
 const FESTIVAL_KEY = 'nx-festival-theme'
 const NORMAL_KEY = 'theme'
 
@@ -23,7 +23,7 @@ function readTheme(): Theme {
     } catch {
         // Storage blocked: fall through to the default.
     }
-    if (live) return 'dark'
+    if (live) return 'light'
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 

@@ -640,8 +640,9 @@ export function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-5">
                     <p className="text-sm text-muted-foreground">
-                        While it is on, the login page and the panel turn black and red (dark is the
-                        default, anyone can still switch to light), and the dashboard shows a
+                        While it is on, the login page turns black, the panel takes red accents
+                        (light by default; switching to dark gives the black and red look), and the
+                        dashboard shows a
                         countdown slider in place of the news. It switches itself off when the end
                         time passes.
                     </p>

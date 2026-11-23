@@ -128,8 +128,8 @@ function App() {
 function Layout({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
-    // The festival dresses the whole panel (see .festival in globals.css) and
-    // makes dark the default; this switches it on and off as it starts and ends.
+    // The festival dresses the whole panel (see .festival in globals.css), light
+    // by default; this switches it on and off as it starts and ends.
     const { live: festivalLive } = useFestival()
     useEffect(() => {
         applyTheme()
