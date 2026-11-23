@@ -46,13 +46,40 @@ interface NewsItem {
     has_banner: boolean
 }
 
-/** An ISO time as the value a datetime-local input takes, in local time. */
-function toLocalInput(iso: string | undefined): string {
+// The festival's end is entered in Tehran time, whatever time zone the
+// browser is in. Iran has kept a fixed UTC+03:30 since it dropped daylight
+// saving in 2022, so a fixed offset is exact.
+const TEHRAN_OFFSET = '+03:30'
+const TEHRAN_OFFSET_MS = (3 * 60 + 30) * 60 * 1000
+
+/** An ISO time as the value a datetime-local input takes, in Tehran time. */
+function toTehranInput(iso: string | undefined): string {
     if (!iso) return ''
-    const d = new Date(iso)
-    if (isNaN(d.getTime())) return ''
-    const p = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+    const t = Date.parse(iso)
+    if (isNaN(t)) return ''
+    // Shift to Tehran wall-clock time and read it back with the UTC getters.
+    return new Date(t + TEHRAN_OFFSET_MS).toISOString().slice(0, 16)
+}
+
+/** A datetime-local value, read as Tehran time, as an ISO time. */
+function fromTehranInput(value: string): string {
+    if (!value) return ''
+    return `${value.length === 16 ? value + ':00' : value}${TEHRAN_OFFSET}`
+}
+
+/** The same moment for people to read: "28 Nov 2026, 23:59 (Tehran)". */
+function tehranLabel(value: string): string {
+    const t = Date.parse(fromTehranInput(value))
+    if (isNaN(t)) return ''
+    return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Tehran',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).format(t) + ' (Tehran)'
 }
 
 export function SettingsPage() {
@@ -98,7 +125,7 @@ export function SettingsPage() {
             const data = await settingsAPI.getSettings()
             setSettings(data)
             setFestivalOn(!!data.festival_enabled)
-            setFestivalEnd(toLocalInput(data.festival_ends_at))
+            setFestivalEnd(toTehranInput(data.festival_ends_at))
         } catch (err: any) {
             console.error('Failed to fetch settings:', err)
         }
@@ -123,7 +150,7 @@ export function SettingsPage() {
             setSavingFestival(true)
             const data = await settingsAPI.updateSettings({
                 festival_enabled: festivalOn,
-                festival_ends_at: festivalEnd ? new Date(festivalEnd).toISOString() : '',
+                festival_ends_at: fromTehranInput(festivalEnd),
             })
             setSettings(data)
             await refreshFestival()
@@ -631,7 +658,7 @@ export function SettingsPage() {
                                 Festival is on
                             </label>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Ends at</label>
+                                <label className="text-sm font-medium">Ends at (Tehran time)</label>
                                 <Input
                                     type="datetime-local"
                                     value={festivalEnd}
@@ -639,7 +666,13 @@ export function SettingsPage() {
                                     disabled={!settings}
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    In your browser's time zone. The countdown runs to this moment.
+                                    Gregorian date, Tehran time (UTC+03:30), whatever time zone
+                                    this computer is in. The countdown runs to this moment.
+                                    {festivalEnd && (
+                                        <span className="mt-1 block font-medium text-foreground" dir="ltr">
+                                            Ends: {tehranLabel(festivalEnd)}
+                                        </span>
+                                    )}
                                 </p>
                             </div>
                             <Button
