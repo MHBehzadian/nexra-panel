@@ -7,10 +7,12 @@ small JSON file next to the database, so no DB migration is required.
 import os
 import json
 import threading
+from datetime import datetime, timezone
 
 DATA_DIR = os.environ.get("WALPANEL_DATA_DIR", "/app/data")
 SETTINGS_PATH = os.path.join(DATA_DIR, "settings.json")
 LOGO_PATH = os.path.join(DATA_DIR, "logo")
+FESTIVAL_BANNER_PATH = os.path.join(DATA_DIR, "festival_banner")
 
 _lock = threading.Lock()
 
@@ -28,6 +30,11 @@ DEFAULTS = {
     # the names set in Marzban: {panel id: {node key: name}}, where the node
     # key is Marzban's node id, or "master" for the main server.
     "node_names": {},
+    # The Black Friday festival: black login page and a countdown slider on
+    # the dashboard in place of the news. festival_ends_at is an ISO time with
+    # its offset; once it has passed the festival switches itself off.
+    "festival_enabled": False,
+    "festival_ends_at": "",
 }
 
 
@@ -48,6 +55,7 @@ def _read() -> dict:
 def get_settings() -> dict:
     data = _read()
     data["has_logo"] = os.path.exists(LOGO_PATH)
+    data["has_festival_banner"] = os.path.exists(FESTIVAL_BANNER_PATH)
     return data
 
 
@@ -86,11 +94,43 @@ def set_panel_node_names(panel_id: int, names: dict[str, str]) -> dict[str, str]
     return cleaned
 
 
+def parse_festival_end(value: str) -> datetime | None:
+    """The festival's end as an aware datetime, or None for no end. Raises
+    ValueError for anything that isn't an ISO time with an offset."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    ends_at = datetime.fromisoformat(value)
+    if ends_at.tzinfo is None:
+        raise ValueError("festival_ends_at needs a UTC offset")
+    return ends_at
+
+
+def get_festival(data: dict | None = None) -> dict:
+    data = data or _read()
+    enabled = bool(data.get("festival_enabled"))
+    ends_raw = data.get("festival_ends_at") or ""
+    try:
+        ends_at = parse_festival_end(ends_raw)
+    except ValueError:
+        ends_at = None
+    has_banner = os.path.exists(FESTIVAL_BANNER_PATH)
+    return {
+        "enabled": enabled,
+        "ends_at": ends_at.isoformat() if ends_at else "",
+        "active": enabled and (ends_at is None or ends_at > datetime.now(timezone.utc)),
+        "has_banner": has_banner,
+        # Changes whenever a new banner is uploaded, so browsers refetch it.
+        "banner_version": int(os.path.getmtime(FESTIVAL_BANNER_PATH)) if has_banner else 0,
+    }
+
+
 def get_public_branding() -> dict:
     data = _read()
     return {
         "login_title": data.get("login_title") or "Nexra Panel",
         "has_logo": os.path.exists(LOGO_PATH),
+        "festival": get_festival(data),
     }
 
 
@@ -104,8 +144,26 @@ def get_logo_path():
     return LOGO_PATH if os.path.exists(LOGO_PATH) else None
 
 
+def save_festival_banner(content: bytes) -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(FESTIVAL_BANNER_PATH, "wb") as f:
+        f.write(content)
+
+
+def delete_festival_banner() -> None:
+    if os.path.exists(FESTIVAL_BANNER_PATH):
+        os.remove(FESTIVAL_BANNER_PATH)
+
+
+def get_festival_banner_path():
+    return FESTIVAL_BANNER_PATH if os.path.exists(FESTIVAL_BANNER_PATH) else None
+
+
 def logo_media_type() -> str:
-    path = get_logo_path()
+    return image_media_type(get_logo_path())
+
+
+def image_media_type(path: str | None) -> str:
     if not path:
         return "application/octet-stream"
     try:

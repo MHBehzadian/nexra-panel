@@ -1,3 +1,4 @@
+import type { FestivalInfo } from './festival'
 import { getApiClient } from './api-client'
 import { v4 as uuidv4 } from 'uuid'
 import {
@@ -516,11 +517,15 @@ export interface PanelSettings {
     backup_interval_hours: number
     agent_base_url: string
     has_logo: boolean
+    festival_enabled: boolean
+    festival_ends_at: string
+    has_festival_banner: boolean
 }
 
 export interface BrandingInfo {
     login_title: string
     has_logo: boolean
+    festival?: FestivalInfo
 }
 
 export function getLogoUrl(bust = false): string {
@@ -574,6 +579,24 @@ export const settingsAPI = {
         const response = await api.put<ResponseModel<Record<string, string>>>(`/superadmin/node-names/${panelId}`, { names })
         if (!response.data.success) {
             throw new Error(response.data.message || 'Failed to save node names')
+        }
+    },
+
+    uploadFestivalBanner: async (file: File): Promise<void> => {
+        const formData = new FormData()
+        formData.append('file', file)
+        const response = await api.post<ResponseModel<void>>(`/superadmin/settings/festival-banner`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to upload banner')
+        }
+    },
+
+    deleteFestivalBanner: async (): Promise<void> => {
+        const response = await api.delete<ResponseModel<void>>(`/superadmin/settings/festival-banner`)
+        if (!response.data.success) {
+            throw new Error(response.data.message || 'Failed to remove banner')
         }
     },
 

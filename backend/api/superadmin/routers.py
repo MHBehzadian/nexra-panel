@@ -37,6 +37,9 @@ from backend.utils.settings_store import (
     save_logo,
     get_node_names,
     set_panel_node_names,
+    parse_festival_end,
+    save_festival_banner,
+    delete_festival_banner,
 )
 from backend.utils.banners import save_banner, delete_banner, get_banner_path
 from backend.utils.telegram import send_backup_to_telegram
@@ -786,7 +789,17 @@ async def update_panel_settings(
     payload: SettingsInput,
     admin: dict = Depends(get_current_superadmin),
 ):
-    data = update_settings(payload.model_dump(exclude_unset=True))
+    patch = payload.model_dump(exclude_unset=True)
+    if patch.get("festival_ends_at") is not None:
+        try:
+            ends_at = parse_festival_end(patch["festival_ends_at"])
+        except ValueError:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"success": False, "message": "Festival end time is not a valid date"},
+            )
+        patch["festival_ends_at"] = ends_at.isoformat() if ends_at else ""
+    data = update_settings(patch)
     logger.info("Panel settings updated")
     return ResponseModel(
         success=True,
@@ -811,6 +824,37 @@ async def upload_login_logo(
     save_logo(content)
     logger.info("Login logo updated")
     return ResponseModel(success=True, message="Logo updated successfully")
+
+
+@router.post(
+    "/settings/festival-banner",
+    description="Upload the festival's second dashboard slide",
+    response_model=ResponseModel,
+)
+async def upload_festival_banner(
+    file: UploadFile = File(...),
+    admin: dict = Depends(get_current_superadmin),
+):
+    content = await file.read()
+    if not content or not (file.content_type or "").startswith("image/"):
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"success": False, "message": "Only image files are allowed"},
+        )
+    save_festival_banner(content)
+    logger.info("Festival banner updated")
+    return ResponseModel(success=True, message="Festival banner updated successfully")
+
+
+@router.delete(
+    "/settings/festival-banner",
+    description="Remove the festival's dashboard banner",
+    response_model=ResponseModel,
+)
+async def remove_festival_banner(admin: dict = Depends(get_current_superadmin)):
+    delete_festival_banner()
+    logger.info("Festival banner removed")
+    return ResponseModel(success=True, message="Festival banner removed")
 
 
 @router.post(

@@ -11,6 +11,8 @@ from backend.utils.settings_store import (
     get_public_branding,
     get_logo_path,
     logo_media_type,
+    get_festival_banner_path,
+    image_media_type,
 )
 from backend.utils.banners import get_banner_path, banner_media_type
 
@@ -82,6 +84,17 @@ async def get_banner(
             content={"success": False, "message": "No banner set"},
         )
     return FileResponse(path, media_type=banner_media_type(news_id))
+
+
+@router.get("/festival-banner", description="The festival's dashboard banner (if set)")
+async def get_festival_banner():
+    path = get_festival_banner_path()
+    if not path:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "message": "No festival banner set"},
+        )
+    return FileResponse(path, media_type=image_media_type(path))
 
 
 @router.get("/logo", description="Custom login logo (if set)")

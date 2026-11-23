@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { Sidebar } from '@/components/Sidebar'
@@ -13,6 +13,8 @@ import { BotsPage } from '@/pages/BotsPage'
 import { TopupBotPage } from '@/pages/TopupBotPage'
 import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useFestival } from '@/hooks/useFestival'
+import { applyTheme } from '@/hooks/useTheme'
 
 // BASE_URL carries a trailing slash ("/dashboard/"), and React Router only
 // strips a basename when the URL starts with it in full — so a bare
@@ -126,12 +128,19 @@ function App() {
 function Layout({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
+    // The festival dresses the whole panel (see .festival in globals.css) and
+    // makes dark the default; this switches it on and off as it starts and ends.
+    const { live: festivalLive } = useFestival()
+    useEffect(() => {
+        applyTheme()
+    }, [festivalLive])
+
     return (
         // The page scrolls, as it always did — one scrollbar, at the window
         // edge. (Making the content its own scroll area pins the sidebar just
         // as well, but puts a second scrollbar inside the layout and narrows
         // every card by its width.)
-        <div className="flex min-h-screen bg-background max-w-full overflow-x-hidden">
+        <div className="nx-shell flex min-h-screen bg-background max-w-full overflow-x-hidden">
             {/* Mobile Sidebar Overlay */}
             {sidebarOpen && (
                 <div

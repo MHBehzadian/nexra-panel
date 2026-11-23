@@ -98,6 +98,44 @@
         --surface-shadow-hover: 0 26px 62px rgba(0, 0, 0, 0.26);
         --header-bg: rgba(8, 14, 24, 0.88);
     }
+
+    /* ---------------------------------------------- Black Friday festival
+       Set on <html> while the festival is on in Settings (see
+       hooks/useTheme.ts). Dark becomes the login page's black and red; light
+       keeps its paper ground and only trades the blue accent for red. */
+    .festival {
+        --primary: 0 0% 8%;
+        --ring: 355 100% 59%;
+        --brand-blue: 355 100% 59%;
+    }
+
+    .festival.dark {
+        --background: 0 0% 2%;
+        --foreground: 0 0% 96%;
+        --card: 0 0% 7%;
+        --card-foreground: 0 0% 96%;
+        --popover: 0 0% 9%;
+        --popover-foreground: 0 0% 96%;
+        --muted: 0 0% 11%;
+        --muted-foreground: 0 0% 64%;
+        --accent: 0 0% 13%;
+        --accent-foreground: 0 0% 96%;
+        --border: 0 0% 15%;
+        --input: 0 0% 16%;
+        --primary: 355 100% 59%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 0 0% 13%;
+        --secondary-foreground: 0 0% 96%;
+        --ring: 355 100% 59%;
+
+        --brand-blue: 355 100% 59%;
+
+        --surface-gradient: linear-gradient(160deg, #141414 0%, #0e0e0e 55%, #0a0a0a 100%);
+        --surface-highlight: rgba(255, 255, 255, 0.05);
+        --surface-shadow: 0 22px 55px rgba(0, 0, 0, 0.45);
+        --surface-shadow-hover: 0 26px 62px rgba(255, 45, 61, 0.12);
+        --header-bg: rgba(6, 6, 6, 0.9);
+    }
 }
 
 @layer base {
@@ -134,6 +172,35 @@
         background-image:
             radial-gradient(ellipse 80% 55% at 50% -10%, rgba(73, 121, 232, 0.1), transparent 60%);
         background-attachment: fixed;
+    }
+
+    /* The login page's diagonal OFF texture behind the whole panel, fainter
+       here since there is a page of content on top of it. The body is see-
+       through so this plane (fixed, under everything) shows between cards. */
+    .festival.dark body {
+        background-color: transparent;
+        background-image:
+            radial-gradient(ellipse 70% 45% at 100% 110%, rgba(255, 45, 61, 0.1), transparent 65%),
+            radial-gradient(ellipse 60% 40% at 0% -10%, rgba(255, 255, 255, 0.04), transparent 60%);
+    }
+
+    .festival.dark .nx-shell {
+        background-color: transparent;
+    }
+
+    .festival.dark body::before {
+        content: '';
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        width: 260vmax;
+        height: 260vmax;
+        transform: translate(-50%, -50%) rotate(-28deg);
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='150'><g font-family='Arial Black,Arial,Helvetica,sans-serif' font-weight='900' font-size='64' letter-spacing='4'><text x='6' y='62' fill='none' stroke='white' stroke-opacity='.085' stroke-width='1.4'>OFF</text><text x='156' y='137' fill='white' fill-opacity='.04'>OFF</text></g><text x='224' y='60' font-family='Arial Black,Arial,sans-serif' font-weight='900' font-size='40' fill='%23ff2d3d' fill-opacity='.14'>%25</text></svg>");
+        background-size: 300px 150px;
+        opacity: 0.55;
+        z-index: -1;
+        pointer-events: none;
     }
 }
 

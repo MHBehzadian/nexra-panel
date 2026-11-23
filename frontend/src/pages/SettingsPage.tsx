@@ -13,6 +13,7 @@ import {
     Send,
     Save,
     Loader2,
+    PartyPopper,
 } from 'lucide-react'
 import { superadminAPI, settingsAPI, getLogoUrl, type PanelSettings } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -36,12 +37,22 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { NodeNamesCard } from './components/NodeNamesCard'
+import { festivalBannerUrl, setFestival } from '@/lib/festival'
 
 interface NewsItem {
     id: number
     message: string | null
     created_at: string
     has_banner: boolean
+}
+
+/** An ISO time as the value a datetime-local input takes, in local time. */
+function toLocalInput(iso: string | undefined): string {
+    if (!iso) return ''
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ''
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 export function SettingsPage() {
@@ -70,6 +81,13 @@ export function SettingsPage() {
     const [testingTelegram, setTestingTelegram] = useState(false)
     const [logoVersion, setLogoVersion] = useState(0)
 
+    // Black Friday festival
+    const [festivalOn, setFestivalOn] = useState(false)
+    const [festivalEnd, setFestivalEnd] = useState('')
+    const [savingFestival, setSavingFestival] = useState(false)
+    const [uploadingFestivalBanner, setUploadingFestivalBanner] = useState(false)
+    const [festivalBannerVersion, setFestivalBannerVersion] = useState(() => Date.now())
+
     useEffect(() => {
         fetchNews()
         fetchSettings()
@@ -79,8 +97,69 @@ export function SettingsPage() {
         try {
             const data = await settingsAPI.getSettings()
             setSettings(data)
+            setFestivalOn(!!data.festival_enabled)
+            setFestivalEnd(toLocalInput(data.festival_ends_at))
         } catch (err: any) {
             console.error('Failed to fetch settings:', err)
+        }
+    }
+
+    // Hands the panel the new festival state straight away, so this tab
+    // changes look without waiting for a reload.
+    const refreshFestival = async () => {
+        try {
+            setFestival((await settingsAPI.getBranding()).festival)
+        } catch {
+            // The next page load picks it up.
+        }
+    }
+
+    const handleSaveFestival = async () => {
+        if (festivalOn && !festivalEnd) {
+            alert('Set when the festival ends: the countdown counts down to it.')
+            return
+        }
+        try {
+            setSavingFestival(true)
+            const data = await settingsAPI.updateSettings({
+                festival_enabled: festivalOn,
+                festival_ends_at: festivalEnd ? new Date(festivalEnd).toISOString() : '',
+            })
+            setSettings(data)
+            await refreshFestival()
+            alert(festivalOn ? 'Festival is on' : 'Festival is off')
+        } catch (err: any) {
+            alert(err?.message || 'Failed to save the festival')
+        } finally {
+            setSavingFestival(false)
+        }
+    }
+
+    const handleFestivalBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+        try {
+            setUploadingFestivalBanner(true)
+            await settingsAPI.uploadFestivalBanner(file)
+            setFestivalBannerVersion(Date.now())
+            await fetchSettings()
+            await refreshFestival()
+        } catch (err: any) {
+            alert(err?.message || 'Failed to upload banner')
+        } finally {
+            setUploadingFestivalBanner(false)
+            event.target.value = ''
+        }
+    }
+
+    const handleFestivalBannerDelete = async () => {
+        if (!confirm('Remove the festival banner?')) return
+        try {
+            await settingsAPI.deleteFestivalBanner()
+            await fetchSettings()
+            await refreshFestival()
+        } catch (err: any) {
+            alert(err?.message || 'Failed to remove banner')
         }
     }
 
@@ -523,6 +602,98 @@ export function SettingsPage() {
                     {savingSettings ? 'Saving...' : 'Save Settings'}
                 </Button>
             </div>
+
+            {/* Black Friday festival */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <PartyPopper className="h-5 w-5 text-primary" />
+                        Black Friday Festival
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                    <p className="text-sm text-muted-foreground">
+                        While it is on, the login page and the panel turn black and red (dark is the
+                        default, anyone can still switch to light), and the dashboard shows a
+                        countdown slider in place of the news. It switches itself off when the end
+                        time passes.
+                    </p>
+                    <div className="grid gap-5 md:grid-cols-2">
+                        <div className="space-y-4">
+                            <label className="flex items-center gap-2 text-sm font-medium">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4"
+                                    checked={festivalOn}
+                                    onChange={(e) => setFestivalOn(e.target.checked)}
+                                    disabled={!settings}
+                                />
+                                Festival is on
+                            </label>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Ends at</label>
+                                <Input
+                                    type="datetime-local"
+                                    value={festivalEnd}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFestivalEnd(e.target.value)}
+                                    disabled={!settings}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    In your browser's time zone. The countdown runs to this moment.
+                                </p>
+                            </div>
+                            <Button
+                                onClick={handleSaveFestival}
+                                disabled={savingFestival || !settings}
+                                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                            >
+                                {savingFestival ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                {savingFestival ? 'Saving...' : 'Save Festival'}
+                            </Button>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Second slide (optional)</label>
+                            {settings?.has_festival_banner ? (
+                                <img
+                                    src={festivalBannerUrl(festivalBannerVersion)}
+                                    alt="Festival banner"
+                                    className="h-28 w-full rounded-lg border object-cover"
+                                />
+                            ) : (
+                                <div className="flex h-28 w-full items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">
+                                    No banner: the slider shows only the countdown
+                                </div>
+                            )}
+                            <div className="flex gap-2">
+                                <Button
+                                    onClick={() => document.getElementById('festival-banner-input')?.click()}
+                                    disabled={uploadingFestivalBanner}
+                                    variant="outline"
+                                    className="flex-1"
+                                >
+                                    <Upload className="mr-2 h-4 w-4" />
+                                    {uploadingFestivalBanner ? 'Uploading...' : settings?.has_festival_banner ? 'Replace' : 'Upload'}
+                                </Button>
+                                {settings?.has_festival_banner && (
+                                    <Button variant="outline" onClick={handleFestivalBannerDelete}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                )}
+                                <Input
+                                    id="festival-banner-input"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleFestivalBannerUpload}
+                                    className="hidden"
+                                />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Wide image, about 4:1 (e.g. 1600×400). Shown cropped to the slider's frame.
+                            </p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
 
             <NodeNamesCard />
 

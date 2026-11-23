@@ -29,6 +29,8 @@ import { DashboardData, ClientsOutput, MarzbanOverview, MarzbanPeriod, MARZBAN_P
 import { Donut, Gauge, SEGMENT_COLORS } from '@/components/charts/Donut'
 import { SegmentedBar } from '@/components/charts/SegmentedBar'
 import { useBannerImage } from '@/hooks/useBannerImage'
+import { useFestival } from '@/hooks/useFestival'
+import { FestivalSlider } from '@/components/festival/FestivalSlider'
 import { ManageServersDialog } from './components/ManageServersDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -278,6 +280,7 @@ function NewsCarousel({ items }: { items: NewsFeedItem[] }): JSX.Element {
 }
 
 export function DashboardPage() {
+    const { festival, live: festivalLive } = useFestival()
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -958,8 +961,14 @@ export function DashboardPage() {
                 a banner image is meant to be the whole visual, not a picture
                 inside another frame - so there's nothing here but the
                 carousel itself. */}
-            {userRole === 'admin' && dashboardData?.news && dashboardData.news.length > 0 && (
-                <NewsCarousel items={dashboardData.news} />
+            {/* While the Black Friday festival is on, its countdown slider
+                stands in for the news, for admins and the superadmin alike. */}
+            {festivalLive && festival ? (
+                <FestivalSlider festival={festival} />
+            ) : (
+                userRole === 'admin' && dashboardData?.news && dashboardData.news.length > 0 && (
+                    <NewsCarousel items={dashboardData.news} />
+                )
             )}
 
 

@@ -152,6 +152,9 @@ class SettingsInput(BaseModel):
     backup_enabled: Optional[bool] = None
     backup_interval_hours: Optional[int] = None
     agent_base_url: Optional[str] = None
+    festival_enabled: Optional[bool] = None
+    # ISO time with its offset, e.g. 2026-11-28T23:59:00+03:30; "" for no end.
+    festival_ends_at: Optional[str] = None
 
 
 class NodeNamesInput(BaseModel):

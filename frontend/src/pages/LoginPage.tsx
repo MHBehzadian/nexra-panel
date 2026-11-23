@@ -6,28 +6,8 @@ import { loginSchema, LoginFormData } from '@/types'
 import { authAPI, settingsAPI, getLogoUrl } from '@/lib/api'
 import { setToken, getDecodedToken, isTokenValid } from '@/lib/auth'
 import logo from '@/assets/logo.png'
-
-// Black Friday dress for the login page: black, a diagonal OFF texture and a
-// red discount sticker on the logo. Set to false to bring the usual page back.
-const BLACK_FRIDAY = true
-
-function DiscountSticker({ className }: { className?: string }) {
-    // A 16-point starburst with a percent sign, drawn rather than shipped as an
-    // image so it stays sharp at any size.
-    const points = Array.from({ length: 32 }, (_, i) => {
-        const r = i % 2 ? 40 : 50
-        const a = (Math.PI * i) / 16
-        return `${50 + r * Math.sin(a)},${50 - r * Math.cos(a)}`
-    }).join(' ')
-    return (
-        <svg className={className} viewBox="0 0 100 100" aria-hidden="true">
-            <polygon points={points} fill="#ff2d3d" />
-            <circle cx="50" cy="50" r="33" fill="none" stroke="#fff" strokeOpacity=".35" strokeWidth="1.5" strokeDasharray="3 3" />
-            <text x="50" y="49" textAnchor="middle" fontFamily="Arial Black,Arial,sans-serif" fontWeight="900" fontSize="30" fill="#fff">%</text>
-            <text x="50" y="68" textAnchor="middle" fontFamily="Arial Black,Arial,sans-serif" fontWeight="900" fontSize="13" letterSpacing="1.5" fill="#fff">OFF</text>
-        </svg>
-    )
-}
+import { DiscountSticker, OFF_TEXTURE } from '@/components/festival/DiscountSticker'
+import { cachedFestival, isFestivalLive, setFestival, type FestivalInfo } from '@/lib/festival'
 
 const styles = `
 .nx-login-root{
@@ -83,8 +63,8 @@ const styles = `
 @media (prefers-reduced-motion:reduce){.nx-dot{animation:none}.nx-aurora{animation:none}}
 
 /* ---------------------------------------------------------- Black Friday
-   Everything below only applies under .nx-bf, so switching the campaign off
-   is a single flag (BLACK_FRIDAY) and the page falls back to the usual look. */
+   Everything below only applies under .nx-bf, which is set while the
+   festival is on in Settings, so the page falls back to the usual look. */
 .nx-bf{
   --bf-red:#ff2d3d;
   background:#050505; color:#f5f5f5;
@@ -98,7 +78,7 @@ const styles = `
 .nx-bf-texture{
   position:absolute; left:50%; top:50%; width:260vmax; height:260vmax;
   transform:translate(-50%,-50%) rotate(-28deg);
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='150'><g font-family='Arial Black,Arial,Helvetica,sans-serif' font-weight='900' font-size='64' letter-spacing='4'><text x='6' y='62' fill='none' stroke='white' stroke-opacity='.085' stroke-width='1.4'>OFF</text><text x='156' y='137' fill='white' fill-opacity='.04'>OFF</text></g><text x='224' y='60' font-family='Arial Black,Arial,sans-serif' font-weight='900' font-size='40' fill='%23ff2d3d' fill-opacity='.14'>%25</text></svg>");
+  background-image:${OFF_TEXTURE};
   background-size:300px 150px;
   animation:nx-bf-slide 60s linear infinite;
   pointer-events:none;
@@ -151,13 +131,21 @@ const styles = `
 export function LoginPage() {
     const navigate = useNavigate()
     const [serverError, setServerError] = useState<string | null>(null)
-    const [branding, setBranding] = useState<{ login_title: string; has_logo: boolean }>({
+    const [branding, setBranding] = useState<{ login_title: string; has_logo: boolean; festival?: FestivalInfo | null }>({
         login_title: 'Nexra Panel',
         has_logo: false,
+        festival: cachedFestival(),
     })
+    const BLACK_FRIDAY = isFestivalLive(branding.festival)
 
     useEffect(() => {
-        settingsAPI.getBranding().then(setBranding).catch(() => { })
+        settingsAPI
+            .getBranding()
+            .then((b) => {
+                setFestival(b.festival)
+                setBranding(b)
+            })
+            .catch(() => { })
     }, [])
 
     // Light only, whatever the saved theme is. index.html skips the class on a
