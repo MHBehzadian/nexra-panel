@@ -114,16 +114,18 @@ class BotCreateAdminInput(BaseModel):
 
 
 class BotCreateSubAdminInput(BaseModel):
-    """A reseller making a panel for a colleague of theirs, out of their own
-    panel's traffic. The new panel is theirs too (same Telegram account), so the
-    bot's top-ups, warnings and bills for it go to them, never to the colleague."""
+    """A reseller making a panel for a colleague of theirs. It starts empty and
+    is paid for on its own, through the bot's usual top-up; nothing is taken
+    from the reseller's own panels. The new panel is theirs too (same Telegram
+    account), so the bot's top-ups, warnings and bills for it go to them,
+    never to the colleague."""
 
     telegram_id: int
-    # Which of their panels the traffic comes from; optional when they own one.
+    # Which of their panels the new one is modelled on (server, inbounds,
+    # expiry); optional when they own one.
     source_username: Optional[str] = None
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
     password: str = Field(min_length=6, max_length=64)
-    traffic_gb: float = Field(gt=0)
     white_label: bool = False
 
 

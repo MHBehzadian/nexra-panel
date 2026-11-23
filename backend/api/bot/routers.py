@@ -414,7 +414,7 @@ async def create_admin(
 
 @router.post(
     "/admin/create-sub",
-    description="A reseller makes a panel for a colleague, out of one of their own panels' traffic",
+    description="A reseller makes an empty panel for a colleague, paid for separately through the bot",
 )
 async def create_sub_admin(
     payload: BotCreateSubAdminInput,
@@ -425,34 +425,23 @@ async def create_sub_admin(
     if error:
         return error
 
-    # Every way the source panel could be unable to sell is also a way it must
-    # not hand its traffic on: otherwise a lock or an expiry is undone by moving
-    # the balance into a fresh panel.
+    # A reseller whose own panel is locked or expired can't open new ones
+    # meanwhile; a lock would otherwise be sidestepped by starting afresh.
     if source.suspended_reason or not source.is_active:
         return _error(status.HTTP_403_FORBIDDEN, "This panel is suspended or inactive")
     if source.expiry_date and source.expiry_date <= datetime.utcnow():
         return _error(status.HTTP_403_FORBIDDEN, "This panel has expired")
-    if crud.get_admin_by_username(db, payload.username):
-        return _error(status.HTTP_409_CONFLICT, "An admin with that username already exists")
 
-    traffic_bytes = int(payload.traffic_gb * 1024**3)
-    # Taken first, in the one UPDATE that also checks the balance, so two
-    # requests at once can't both spend the same traffic. Given back below if
-    # the new panel can't be made.
-    if not crud.deduct_admin_traffic(db, source, traffic_bytes):
-        return _error(
-            status.HTTP_409_CONFLICT,
-            f"Only {source.traffic / 1024**3:.2f} GB left on this panel",
-        )
-
-    # The new panel inherits what the superadmin set on the one it came from:
-    # its inbounds, its expiry and how traffic is returned.
+    # Empty: its traffic is bought on its own through the bot's top-up, so
+    # nothing moves out of the reseller's panel. It inherits what the
+    # superadmin set on that panel: its server, inbounds, expiry and how
+    # traffic is returned.
     _, error = await _provision_admin(
         db,
         username=payload.username,
         password=payload.password,
         panel_name=source.panel,
-        traffic_bytes=traffic_bytes,
+        traffic_bytes=0,
         expiry_date=source.expiry_date,
         telegram_id=source.telegram_id,
         marzban_inbounds=source.marzban_inbounds,
@@ -463,15 +452,11 @@ async def create_sub_admin(
         parent_id=source.id,
     )
     if error:
-        db.rollback()
-        crud.grant_admin_traffic(db, source, traffic_bytes)
-        db.refresh(source)
         return error
 
-    db.refresh(source)
     logger.info(
         f"Reseller {source.username} made {'white-label ' if payload.white_label else ''}"
-        f"panel {payload.username} with {payload.traffic_gb} GB"
+        f"panel {payload.username}"
     )
     return ResponseModel(
         success=True,
@@ -480,8 +465,6 @@ async def create_sub_admin(
             "username": payload.username,
             "panel": source.panel,
             "source_username": source.username,
-            "traffic_gb": payload.traffic_gb,
-            "source_traffic_bytes": source.traffic,
             "white_label": payload.white_label,
             "expiry_date": source.expiry_date.isoformat() if source.expiry_date else None,
         },

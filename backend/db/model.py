@@ -32,7 +32,7 @@ class Admins(Base):
     # this the admin is only ever told "wrong password" and never why.
     suspended_reason = Column(String, nullable=True)
     # Set when a reseller made this panel from the bot for a colleague of
-    # theirs: the panel it was made from (its traffic came out of that one).
+    # theirs: the panel it was modelled on (same server, inbounds and expiry).
     # Not a foreign key (see a7d3e9b1c4f2): a deleted parent just leaves a stale id.
     parent_id = Column(Integer, nullable=True, index=True)
     # A panel the reseller hands on under their own name: the panel UI shows
