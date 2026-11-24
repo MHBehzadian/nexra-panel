@@ -68,6 +68,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import { UserFormDialog } from './components/UserFormDialog'
+import { SendSubscriptionButton } from './components/SendSubscriptionButton'
 
     function buildSubUrl(subUrl?: string, subId?: string) {
         if (!subUrl || !subId) return ''
@@ -1537,6 +1538,9 @@ function DetailsRow({
                                         QR Code
                                     </Button>
                                 )}
+                                {subUrl && user.sub_id && (
+                                    <SendSubscriptionButton user={user} link={buildSubUrl(subUrl, user.sub_id)} />
+                                )}
                                 <Button size="sm" variant="outline" onClick={onEdit}>
                                     <Edit2 className="h-4 w-4 mr-2" />
                                     Edit
@@ -1715,6 +1719,14 @@ function MobileUserCard({
                                 <QrCode className="h-3 w-3 mr-1" />
                                 QR
                             </Button>
+                        )}
+                        {subUrl && user.sub_id && (
+                            <SendSubscriptionButton
+                                user={user}
+                                link={buildSubUrl(subUrl, user.sub_id)}
+                                className="flex-1 min-w-[80px]"
+                                iconClassName="h-3 w-3 mr-1"
+                            />
                         )}
                         <Button
                             size="sm"
