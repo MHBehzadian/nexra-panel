@@ -132,6 +132,14 @@ class BotCreateSubAdminInput(BaseModel):
     white_label: bool = False
 
 
+class BotSubpanelsInput(BaseModel):
+    """Superadmin turning panel-making on or off, from the bot, for every
+    panel a Telegram account owns."""
+
+    telegram_id: int
+    enabled: bool
+
+
 class BotGrantInput(BaseModel):
     """Superadmin granting traffic straight to a panel, by username — no
     Telegram link required, so panels nobody has linked yet can still be topped up."""

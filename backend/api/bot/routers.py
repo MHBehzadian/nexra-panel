@@ -12,6 +12,7 @@ from backend.schema._input import (
     BotChangePasswordInput,
     BotCreateAdminInput,
     BotCreateSubAdminInput,
+    BotSubpanelsInput,
     BotDeductInput,
     BotGrantInput,
     BotSuspensionInput,
@@ -473,6 +474,32 @@ async def create_sub_admin(
             "white_label": payload.white_label,
             "expiry_date": source.expiry_date.isoformat() if source.expiry_date else None,
         },
+    )
+
+
+@router.post(
+    "/admin/subpanels",
+    description="Superadmin turns panel-making on or off for every panel of a Telegram account",
+)
+async def set_subpanels_permission(
+    payload: BotSubpanelsInput,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_bot_api_key),
+):
+    admins = crud.get_admins_by_telegram_id(db, payload.telegram_id)
+    if not admins:
+        return _not_linked()
+    for admin in admins:
+        admin.can_create_subpanels = payload.enabled
+    db.commit()
+    logger.info(
+        f"Panel-making {'enabled' if payload.enabled else 'disabled'} for Telegram "
+        f"{payload.telegram_id} ({', '.join(a.username for a in admins)})"
+    )
+    return ResponseModel(
+        success=True,
+        message="Updated",
+        data={"enabled": payload.enabled, "usernames": [a.username for a in admins]},
     )
 
 
