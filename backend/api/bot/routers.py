@@ -415,7 +415,7 @@ async def create_admin(
 
 @router.post(
     "/admin/create-sub",
-    description="A reseller makes an empty panel for a colleague, paid for separately through the bot",
+    description="A reseller makes a panel for a colleague, once its traffic is paid for in the bot",
 )
 async def create_sub_admin(
     payload: BotCreateSubAdminInput,
@@ -437,17 +437,38 @@ async def create_sub_admin(
         return _error(status.HTTP_403_FORBIDDEN, "This panel is suspended or inactive")
     if source.expiry_date and source.expiry_date <= datetime.utcnow():
         return _error(status.HTTP_403_FORBIDDEN, "This panel has expired")
+    if crud.get_admin_by_username(db, payload.username):
+        return _error(status.HTTP_409_CONFLICT, "An admin with that username already exists")
 
-    # Empty: its traffic is bought on its own through the bot's top-up, so
-    # nothing moves out of the reseller's panel. It inherits what the
-    # superadmin set on that panel: its server, inbounds, expiry and how
-    # traffic is returned.
+    if payload.dry_run:
+        # The bot asks before taking money, so the name is checked on Marzban
+        # too: an admin that exists only there would otherwise fail the real
+        # call after the customer has paid.
+        panel = crud.get_panel_by_name(db, source.panel)
+        if not panel or panel.panel_type != "marzban":
+            return _error(status.HTTP_400_BAD_REQUEST, "Only Marzban panels can be provisioned here")
+        sudo_api = MarzbanAPI(url=panel.url, username=panel.username, password=panel.password)
+        try:
+            taken = await sudo_api.get_admin(payload.username)
+        except Exception:
+            taken = None
+        if taken:
+            return _error(status.HTTP_409_CONFLICT, "An admin with that username already exists")
+        return ResponseModel(success=True, message="OK", data={"username": payload.username})
+
+    if payload.traffic_gb <= 0:
+        return _error(status.HTTP_400_BAD_REQUEST, "traffic_gb must be more than 0")
+
+    # Made with the traffic that was paid for, so it never exists empty. It
+    # inherits what the superadmin set on the reseller's panel: its server,
+    # inbounds, expiry and how traffic is returned.
+    traffic_bytes = int(payload.traffic_gb * 1024**3)
     _, error = await _provision_admin(
         db,
         username=payload.username,
         password=payload.password,
         panel_name=source.panel,
-        traffic_bytes=0,
+        traffic_bytes=traffic_bytes,
         expiry_date=source.expiry_date,
         telegram_id=source.telegram_id,
         marzban_inbounds=source.marzban_inbounds,
@@ -462,7 +483,7 @@ async def create_sub_admin(
 
     logger.info(
         f"Reseller {source.username} made {'white-label ' if payload.white_label else ''}"
-        f"panel {payload.username}"
+        f"panel {payload.username} with {payload.traffic_gb} GB"
     )
     return ResponseModel(
         success=True,
@@ -472,6 +493,9 @@ async def create_sub_admin(
             "panel": source.panel,
             "source_username": source.username,
             "white_label": payload.white_label,
+            "traffic_gb": payload.traffic_gb,
+            # Named as /admin/topup names it, so the bot reads both alike.
+            "new_traffic_bytes": traffic_bytes,
             "expiry_date": source.expiry_date.isoformat() if source.expiry_date else None,
         },
     )
