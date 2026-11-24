@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AdminInput(BaseModel):
@@ -135,6 +135,17 @@ class BotCreateSubAdminInput(BaseModel):
     traffic_gb: float = Field(default=0, ge=0)
     # Only check that it would succeed; create nothing.
     dry_run: bool = False
+
+    @field_validator("password")
+    @classmethod
+    def _strong_enough(cls, value: str) -> str:
+        """English letters and digits both, no spaces: a colleague's panel
+        must not go out with "123456" or "aaaaaa"."""
+        if not all(33 <= ord(c) <= 126 for c in value):
+            raise ValueError("password must be English characters with no spaces")
+        if not any(c.isascii() and c.isalpha() for c in value) or not any(c.isdigit() for c in value):
+            raise ValueError("password must contain both letters and digits")
+        return value
 
 
 class BotSubpanelsInput(BaseModel):
