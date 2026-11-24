@@ -335,6 +335,12 @@ function AdminDetailsRow({
                             {admin.suspended_reason === 'unpaid' ? 'Suspended · unpaid' : 'Suspended'}
                         </Badge>
                     )}
+                    {admin.white_label && (
+                        <Badge className="ml-2" variant="outline">White-label</Badge>
+                    )}
+                    {admin.can_create_subpanels && (
+                        <Badge className="ml-2" variant="outline">Makes panels</Badge>
+                    )}
                 </TableCell>
                 <TableCell className="text-right space-x-2">
                     <Button size="sm" variant="ghost" onClick={onToggleStatus}>
@@ -417,6 +423,12 @@ function MobileAdminCard({
                         <Badge variant="destructive" className="text-xs">
                             {admin.suspended_reason === 'unpaid' ? 'Suspended · unpaid' : 'Suspended'}
                         </Badge>
+                    )}
+                    {admin.white_label && (
+                        <Badge variant="outline" className="text-xs">White-label</Badge>
+                    )}
+                    {admin.can_create_subpanels && (
+                        <Badge variant="outline" className="text-xs">Makes panels</Badge>
                     )}
                     <ChevronDown
                         className={cn(

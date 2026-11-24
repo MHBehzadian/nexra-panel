@@ -15,6 +15,13 @@ import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useFestival } from '@/hooks/useFestival'
 import { applyTheme } from '@/hooks/useTheme'
+import { isWhiteLabel } from '@/lib/auth'
+
+// The name in the browser tab and the mobile menu. index.html says Nexra Panel
+// before any script runs; a white-label panel replaces it as soon as it loads.
+function appTitle(): string {
+    return isWhiteLabel() ? 'Panel' : 'Nexra Panel'
+}
 
 // BASE_URL carries a trailing slash ("/dashboard/"), and React Router only
 // strips a basename when the URL starts with it in full — so a bare
@@ -89,9 +96,14 @@ function App() {
                     path="/bots"
                     element={
                         <ProtectedRoute>
-                            <Layout>
-                                <BotsPage />
-                            </Layout>
+                            {/* Not in a white-label panel's menu; typed in, it leads home. */}
+                            {isWhiteLabel() ? (
+                                <Navigate to="/" replace />
+                            ) : (
+                                <Layout>
+                                    <BotsPage />
+                                </Layout>
+                            )}
                         </ProtectedRoute>
                     }
                 />
@@ -127,6 +139,10 @@ function App() {
 
 function Layout({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false)
+    const title = appTitle()
+    useEffect(() => {
+        document.title = title
+    }, [title])
 
     // The festival dresses the whole panel (see .festival in globals.css), light
     // by default; this switches it on and off as it starts and ends.
@@ -155,7 +171,7 @@ function Layout({ children }: { children: React.ReactNode }) {
                     }`}
             >
                 <div className="flex items-center justify-between p-4 border-b">
-                    <span className="font-black text-lg tracking-tight">Nexra Panel</span>
+                    <span className="font-black text-lg tracking-tight">{title}</span>
                     <Button
                         variant="ghost"
                         size="icon"

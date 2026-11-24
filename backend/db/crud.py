@@ -42,6 +42,9 @@ def add_admin(db: Session, admin_input: AdminInput) -> None:
         delete_return_traffic=admin_input.delete_return_traffic,
         expiry_date=admin_input.expiry_date,
         telegram_id=admin_input.telegram_id,
+        white_label=admin_input.white_label,
+        parent_id=admin_input.parent_id,
+        can_create_subpanels=admin_input.can_create_subpanels,
     )
     db.add(admin)
     db.commit()
@@ -115,6 +118,10 @@ def update_admin_values(
         admin.delete_return_traffic = admin_input.delete_return_traffic
         admin.expiry_date = admin_input.expiry_date
         admin.telegram_id = admin_input.telegram_id
+        if admin_input.white_label is not None:
+            admin.white_label = admin_input.white_label
+        if admin_input.can_create_subpanels is not None:
+            admin.can_create_subpanels = admin_input.can_create_subpanels
         db.commit()
         return True
     return False

@@ -1,3 +1,5 @@
+import { isWhiteLabel } from '@/lib/auth'
+
 /** The Black Friday festival, as the panel's public branding reports it. */
 export interface FestivalInfo {
     enabled: boolean
@@ -14,7 +16,8 @@ const CACHE_KEY = 'nx-festival'
 /** Whether the festival is on right now. Checked against the browser's clock
  * too, so a page left open switches back by itself when the time runs out. */
 export function isFestivalLive(f: FestivalInfo | null | undefined, now = Date.now()): boolean {
-    if (!f?.active) return false
+    // The festival is Nexra's: a reseller's white-label panel never shows it.
+    if (!f?.active || isWhiteLabel()) return false
     if (!f.ends_at) return true
     const end = Date.parse(f.ends_at)
     return isNaN(end) || end > now

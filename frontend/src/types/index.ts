@@ -6,6 +6,8 @@ export interface DecodedToken {
     role: 'admin' | 'superadmin'
     panel: string
     exp: number
+    // Admins only: a reseller's panel that must show nothing of Nexra.
+    white_label?: boolean
 }
 
 // Login Form
@@ -97,6 +99,14 @@ export const adminSchema = z.object({
     telegram_id: z
         .union([z.number(), z.null()])
         .optional(),
+
+    white_label: z
+        .boolean()
+        .default(false),
+
+    can_create_subpanels: z
+        .boolean()
+        .default(false),
 })
     .superRefine((val, ctx) => {
         // If panel is 3x-ui, flow must be provided (not null/empty)
@@ -127,6 +137,12 @@ export interface AdminOutput {
     telegram_id?: number | null
     // Set while the top-up bot has the panel locked ("unpaid" or "manual").
     suspended_reason?: string | null
+    // Shows nothing of Nexra; made by a reseller for a colleague of theirs.
+    white_label?: boolean
+    // The panel this one was made from, when a reseller made it in the bot.
+    parent_id?: number | null
+    // May make panels for colleagues from the top-up bot.
+    can_create_subpanels?: boolean
 }
 
 // Panel Form
@@ -221,6 +237,11 @@ export const userSchema = z.object({
         .union([z.string(), z.number()])
         .optional()
         .nullable(),
+
+    note: z
+        .string()
+        .max(500, 'Maximum 500 characters')
+        .optional(),
 })
 
 export type UserFormData = z.infer<typeof userSchema>
@@ -238,6 +259,8 @@ export interface ClientsOutput {
     expiry_date_unix: number | null
     sub_id?: string
     flow?: string
+    // Marzban only ("" when empty); null/absent for panels without notes.
+    note?: string | null
 }
 
 // API Response Types
@@ -350,6 +373,8 @@ export interface DashboardData {
     expiry_time?: string
     news?: NewsFeedItem[]
     sub_url?: string
+    panel_type?: string
+    white_label?: boolean
     users?: ClientsOutput[]
     admins?: AdminOutput[]
     panels?: PanelOutput[]

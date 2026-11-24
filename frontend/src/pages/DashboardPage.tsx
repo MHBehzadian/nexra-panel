@@ -1094,7 +1094,7 @@ export function DashboardPage() {
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     type="text"
-                                    placeholder="Search users by email or username..."
+                                    placeholder="Search users by username or note..."
                                     value={searchQuery}
                                     onChange={(e) => {
                                         setSearchQuery(e.target.value)
@@ -1112,7 +1112,8 @@ export function DashboardPage() {
                             const filteredUsers = dashboardData.users.filter(user => {
                                 // Search filter
                                 const matchesSearch = user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                    (user.uuid && user.uuid.toLowerCase().includes(searchQuery.toLowerCase()))
+                                    (user.uuid && user.uuid.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                                    (user.note && user.note.toLowerCase().includes(searchQuery.toLowerCase()))
                                 
                                 if (!matchesSearch) return false
                                 
@@ -1295,6 +1296,7 @@ export function DashboardPage() {
                 }}
                 user={selectedUser}
                 existingUsernames={(dashboardData?.users || []).map((u) => u.username)}
+                supportsNote={dashboardData?.panel_type === 'marzban'}
             />
 
             {/* Delete Confirmation Dialog */}
@@ -1419,7 +1421,18 @@ function DetailsRow({
                         />
                     </button>
                 </TableCell>
-                <TableCell className="font-mono text-sm">{user.username}</TableCell>
+                <TableCell className="font-mono text-sm">
+                    {user.username}
+                    {user.note && (
+                        <div
+                            dir="auto"
+                            title={user.note}
+                            className="font-sans text-xs text-muted-foreground truncate max-w-[16rem]"
+                        >
+                            {user.note}
+                        </div>
+                    )}
+                </TableCell>
                 <TableCell>
                     <div className="space-y-1">
                         <div className="text-sm font-medium">
@@ -1579,6 +1592,9 @@ function MobileUserCard({
                 {/* Left: Name & Traffic */}
                 <div className="flex-1 min-w-0">
                     <span className="font-medium text-sm truncate block">{user.username}</span>
+                    {user.note && (
+                        <span dir="auto" className="text-xs text-muted-foreground truncate block">{user.note}</span>
+                    )}
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-muted-foreground">
                             {bytesToGB(trafficUsed).toFixed(1)} / {bytesToGB(user.data_limit).toFixed(1)} GB

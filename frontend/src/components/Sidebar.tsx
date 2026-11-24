@@ -17,7 +17,7 @@ import {
     Lock,
 } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { logout, getUserRole } from '@/lib/auth'
+import { logout, getUserRole, isWhiteLabel } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 
@@ -118,10 +118,13 @@ export function Sidebar({ onItemClick }: SidebarProps) {
     const location = useLocation()
     const navigate = useNavigate()
     const userRole = getUserRole()
-    const botLocked = useBotLocked(userRole)
+    // A white-label panel leaves out every way back to us: Finance and Support
+    // open our bot and our support account, and Bot is a product we sell.
+    const whiteLabel = isWhiteLabel()
+    const botLocked = useBotLocked(whiteLabel ? null : userRole)
 
     const filteredItems = navigationItems.filter(item =>
-        userRole && item.roles.includes(userRole)
+        userRole && item.roles.includes(userRole) && !(whiteLabel && item.href === '/bots')
     )
 
     const handleLogout = () => {
@@ -159,6 +162,7 @@ export function Sidebar({ onItemClick }: SidebarProps) {
             <div className="border-t p-4 space-y-2">
                 <ThemeToggleButton />
 
+                {!whiteLabel && (<>
                 {/* Straight to the bot rather than a dialog explaining there is
                     one — topping up is the only thing this ever led to. */}
                 <a
@@ -182,6 +186,7 @@ export function Sidebar({ onItemClick }: SidebarProps) {
                     <LifeBuoy className="h-4 w-4" />
                     <span>Support</span>
                 </a>
+                </>)}
 
                 <Button
                     variant="ghost"

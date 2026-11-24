@@ -26,7 +26,8 @@
                 // (dark is its black look), and the choice is kept apart from
                 // the usual one (see src/hooks/useTheme.ts).
                 var fest = JSON.parse(localStorage.getItem('nx-festival') || 'null');
-                var live = !!(fest && fest.active &&
+                // Never on a reseller's white-label panel (see src/lib/festival.ts).
+                var live = localStorage.getItem('nx_white_label') !== '1' && !!(fest && fest.active &&
                     (!fest.ends_at || !(Date.parse(fest.ends_at) <= Date.now())));
                 var saved = localStorage.getItem(live ? 'nx-festival-theme' : 'theme');
                 var dark = saved

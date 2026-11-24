@@ -66,6 +66,8 @@ export function AdminFormDialog({
             is_active: true,
             expiry_date: null,
             telegram_id: null,
+            white_label: false,
+            can_create_subpanels: false,
         },
     })
 
@@ -95,6 +97,8 @@ export function AdminFormDialog({
             setValue('delete_return_traffic', admin.delete_return_traffic)
             setValue('is_active', admin.is_active)
             setValue('telegram_id', admin.telegram_id ?? null)
+            setValue('white_label', !!admin.white_label)
+            setValue('can_create_subpanels', !!admin.can_create_subpanels)
             // If admin has an expiry_date (YYYY-MM-DD), convert to remaining days for the input
             if (admin.expiry_date) {
                 try {
@@ -555,6 +559,36 @@ export function AdminFormDialog({
                                 className="rounded border border-input"
                             />
                             <span className="text-sm">Active</span>
+                        </label>
+
+                        <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                disabled={isSubmitting}
+                                {...register('white_label')}
+                                className="rounded border border-input mt-0.5"
+                            />
+                            <span className="text-sm">
+                                White-label
+                                <span className="block text-xs text-muted-foreground">
+                                    No Nexra name or logo, no Finance/Support links and no announcements in this admin's panel.
+                                </span>
+                            </span>
+                        </label>
+
+                        <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                disabled={isSubmitting}
+                                {...register('can_create_subpanels')}
+                                className="rounded border border-input mt-0.5"
+                            />
+                            <span className="text-sm">
+                                Can create panels for colleagues
+                                <span className="block text-xs text-muted-foreground" dir="rtl">
+                                    دکمه‌ی «ساخت پنل جدید» در ربات برای این ادمین فعال می‌شود (پنل نکسرا یا بدون نشانی از نکسرا، با پرداخت جداگانه).
+                                </span>
+                            </span>
                         </label>
                     </div>
                 </form>

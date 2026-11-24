@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { loginSchema, LoginFormData } from '@/types'
 import { authAPI, settingsAPI, getLogoUrl } from '@/lib/api'
-import { setToken, getDecodedToken, isTokenValid } from '@/lib/auth'
+import { setToken, getDecodedToken, isTokenValid, isWhiteLabelLogin, rememberLoginKind } from '@/lib/auth'
 import logo from '@/assets/logo.png'
 import { DiscountSticker, OFF_TEXTURE } from '@/components/festival/DiscountSticker'
 import { cachedFestival, isFestivalLive, setFestival, type FestivalInfo } from '@/lib/festival'
@@ -131,14 +131,22 @@ const styles = `
 export function LoginPage() {
     const navigate = useNavigate()
     const [serverError, setServerError] = useState<string | null>(null)
+    // The login link of a reseller's white-label panel (login?wl=1): the same
+    // page with no name, logo or mention of Nexra. The branding set in Settings
+    // is ours, so it isn't used here either — nor is the festival, which is ours.
+    const [whiteLabel] = useState(isWhiteLabelLogin)
     const [branding, setBranding] = useState<{ login_title: string; has_logo: boolean; festival?: FestivalInfo | null }>({
-        login_title: 'Nexra Panel',
+        login_title: whiteLabel ? 'your panel' : 'Nexra Panel',
         has_logo: false,
-        festival: cachedFestival(),
+        festival: whiteLabel ? null : cachedFestival(),
     })
-    const BLACK_FRIDAY = isFestivalLive(branding.festival)
+    const BLACK_FRIDAY = !whiteLabel && isFestivalLive(branding.festival)
 
     useEffect(() => {
+        if (whiteLabel) {
+            document.title = 'Panel'
+            return
+        }
         settingsAPI
             .getBranding()
             .then((b) => {
@@ -146,7 +154,7 @@ export function LoginPage() {
                 setBranding(b)
             })
             .catch(() => { })
-    }, [])
+    }, [whiteLabel])
 
     // Light only, whatever the saved theme is. index.html skips the class on a
     // direct hit; this covers arriving here from inside the app (logging out),
@@ -179,6 +187,7 @@ export function LoginPage() {
         try {
             const response = await authAPI.login(data.username, data.password)
             setToken(response.access_token)
+            rememberLoginKind()
             const decoded = getDecodedToken()
             if (decoded?.role) {
                 navigate('/', { replace: true })
@@ -212,18 +221,18 @@ export function LoginPage() {
                     <div className="nx-brand"><span className="nx-dot" /> Panel Access</div>
                 )}
 
-                <div className="nx-logo">
-                    {BLACK_FRIDAY ? (
-                        <>
+                {!whiteLabel && (
+                    <div className="nx-logo">
+                        {BLACK_FRIDAY ? (
                             <span className="nx-bf-logo-wrap">
                                 <img src={branding.has_logo ? getLogoUrl() : logo} alt={branding.login_title} />
                                 <DiscountSticker className="nx-bf-sticker" />
                             </span>
-                        </>
-                    ) : (
-                        <img src={branding.has_logo ? getLogoUrl() : logo} alt={branding.login_title} />
-                    )}
-                </div>
+                        ) : (
+                            <img src={branding.has_logo ? getLogoUrl() : logo} alt={branding.login_title} />
+                        )}
+                    </div>
+                )}
 
                 <h1 className="nx-title">Sign in</h1>
                 <p className="nx-sub">Enter your credentials to access {branding.login_title}.</p>
@@ -268,7 +277,7 @@ export function LoginPage() {
 
                 <div className="nx-foot">
                     <span>Status · Ready</span>
-                    {BLACK_FRIDAY ? <span>Nexra · <span className="nx-bf-off">Black Friday</span></span> : <span>Nexra</span>}
+                    {whiteLabel ? null : BLACK_FRIDAY ? <span>Nexra · <span className="nx-bf-off">Black Friday</span></span> : <span>Nexra</span>}
                 </div>
             </main>
         </div>

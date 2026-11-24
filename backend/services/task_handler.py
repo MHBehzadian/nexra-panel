@@ -321,6 +321,7 @@ async def get_all_users_from_panel(
                     used_data=user.get("used_traffic") or 0,
                     expiry_date_unix=expire_val * 1000 if expire_val else None,
                     sub_id=user.get("subscription_url"),
+                    note=user.get("note") or "",
                 )
             )
         return (

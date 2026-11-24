@@ -31,6 +31,17 @@ class Admins(Base):
     # it gives the panel back. A lock works by changing the password, so without
     # this the admin is only ever told "wrong password" and never why.
     suspended_reason = Column(String, nullable=True)
+    # Set when a reseller made this panel from the bot for a colleague of
+    # theirs: the panel it was modelled on (same server, inbounds and expiry).
+    # Not a foreign key (see a7d3e9b1c4f2): a deleted parent just leaves a stale id.
+    parent_id = Column(Integer, nullable=True, index=True)
+    # A panel the reseller hands on under their own name: the panel UI shows
+    # nothing of Nexra — no name or logo, no Finance or Support links, no
+    # announcements — so its admin has no way back to us around the reseller.
+    white_label = Column(Boolean, default=False, nullable=False, server_default="0")
+    # Whether this admin may make panels for colleagues from the bot (on this
+    # panel's server). Off until the superadmin turns it on per admin.
+    can_create_subpanels = Column(Boolean, default=False, nullable=False, server_default="0")
 
 
 class Panels(Base):

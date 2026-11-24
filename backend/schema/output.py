@@ -23,6 +23,9 @@ class AdminOutput(BaseModel):
     expiry_date: Optional[datetime]
     telegram_id: Optional[int] = None
     suspended_reason: Optional[str] = None
+    white_label: bool = False
+    parent_id: Optional[int] = None
+    can_create_subpanels: bool = False
 
     class Config:
         from_attributes = True
@@ -88,6 +91,9 @@ class ClientsOutput(BaseModel):
     expiry_date_unix: Optional[int]
     sub_id: Optional[str] = None
     flow: Optional[str] = None
+    # Marzban only: "" when the user has none. None means the panel type has
+    # no notes, and the UI hides the field.
+    note: Optional[str] = None
 
     class Config:
         from_attributes = True
