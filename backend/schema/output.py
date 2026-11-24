@@ -26,6 +26,11 @@ class AdminOutput(BaseModel):
     white_label: bool = False
     parent_id: Optional[int] = None
     can_create_subpanels: bool = False
+    # Read by the edit form. Without them it opened with no inbound ticked and
+    # no flow, and saving wiped both — leaving an admin whose new users had no
+    # configuration.
+    marzban_inbounds: Optional[str] = None
+    inbound_flow: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -129,6 +129,8 @@ export interface AdminOutput {
     marzban_inbounds: string | null
     marzban_password: string | null
     flow?: string | null
+    // What the API calls the admin's flow (3x-ui / tx-ui).
+    inbound_flow?: string | null
     traffic: number
     initial_traffic: number
     update_return_traffic: boolean | false

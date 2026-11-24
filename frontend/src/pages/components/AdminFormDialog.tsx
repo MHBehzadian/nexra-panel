@@ -43,6 +43,9 @@ export function AdminFormDialog({
     const [marzbanInbounds, setMarzbanInbounds] = useState<Record<string, string[]> | null>(null)
     const [loadingInbounds, setLoadingInbounds] = useState(false)
     const [selectedInbounds, setSelectedInbounds] = useState<Record<string, string[]>>({})
+    // What the edit form opened with, so saving something else sends these
+    // back exactly as they were instead of a rounded or recomputed value.
+    const [original, setOriginal] = useState<{ trafficGb: number; expiryDays: number | null; expiry: string | null } | null>(null)
 
     const {
         register,
@@ -91,31 +94,38 @@ export function AdminFormDialog({
             setValue('panel', admin.panel)
             setValue('inbound_id', admin.inbound_id || '')
             setValue('marzban_inbounds', admin.marzban_inbounds)
-            setValue('flow', (admin as any).flow ?? null)
-            setValue('traffic', bytesToGB(admin.traffic))
+            setValue('flow', admin.inbound_flow ?? admin.flow ?? null)
+            // Two decimals, not 259.99830757267773. traffic_before is sent as
+            // the same rounded number, so the rounding itself changes nothing.
+            const trafficGb = Math.round(bytesToGB(admin.traffic) * 100) / 100
+            setValue('traffic', trafficGb)
             setValue('update_return_traffic', admin.update_return_traffic)
             setValue('delete_return_traffic', admin.delete_return_traffic)
             setValue('is_active', admin.is_active)
             setValue('telegram_id', admin.telegram_id ?? null)
             setValue('white_label', !!admin.white_label)
             setValue('can_create_subpanels', !!admin.can_create_subpanels)
-            // If admin has an expiry_date (YYYY-MM-DD), convert to remaining days for the input
+            // Expiry as days left. The API sends a full timestamp
+            // ("2026-12-01T10:00:00"); appending "T00:00:00" to it, as this used
+            // to, made an invalid date that showed as 0 days — and saving the
+            // form then set the admin to expire today.
+            let expiryDays: number | null = null
             if (admin.expiry_date) {
-                try {
-                    const exp = new Date(admin.expiry_date + 'T00:00:00')
+                const raw = String(admin.expiry_date)
+                const exp = new Date(raw.includes('T') ? raw : raw + 'T00:00:00')
+                if (!Number.isNaN(exp.getTime())) {
                     const today = new Date()
                     today.setHours(0, 0, 0, 0)
-                    const diffMs = exp.getTime() - today.getTime()
-                    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-                    setValue('expiry_date', diffDays > 0 ? diffDays : 0)
-                } catch (e) {
-                    setValue('expiry_date', admin.expiry_date)
+                    const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+                    expiryDays = diffDays > 0 ? diffDays : 0
                 }
-            } else {
-                setValue('expiry_date', null)
             }
+            setValue('expiry_date', expiryDays)
+            setOriginal({ trafficGb, expiryDays, expiry: admin.expiry_date ?? null })
 
-            // Parse marzban_inbounds if available
+            // The admin's saved inbounds, ticked. Reset first, so another admin's
+            // selection from the last time the form was open can't carry over.
+            setSelectedInbounds({})
             if (admin.marzban_inbounds) {
                 try {
                     setSelectedInbounds(JSON.parse(admin.marzban_inbounds))
@@ -132,6 +142,7 @@ export function AdminFormDialog({
             reset()
             setSelectedInbounds({})
             setMarzbanInbounds(null)
+            setOriginal(null)
         }
     }, [admin, isOpen, setValue, reset])
 
@@ -170,6 +181,13 @@ export function AdminFormDialog({
     }
 
     const handlePanelChange = (panelName: string) => {
+        // The Select reports "" when it is drawn before the panel list has
+        // loaded (its value isn't one of the options yet). Taking that as a
+        // choice emptied the panel and wiped the inbounds of every admin being
+        // edited, so all of it had to be picked again to save anything.
+        if (!panelName) return
+        // Picking the panel it already has changes nothing either.
+        if (panelName === watch('panel') && (admin || marzbanInbounds)) return
         const selectedPanel = panels.find(p => p.name === panelName)
         const panelType = selectedPanel?.panel_type
         
@@ -234,6 +252,10 @@ export function AdminFormDialog({
             let expiryForSubmit: string | null = null
             if (data.expiry_date === null || data.expiry_date === undefined || data.expiry_date === '') {
                 expiryForSubmit = null
+            } else if (original && original.expiry && data.expiry_date === original.expiryDays) {
+                // Days untouched: the stored expiry goes back as it is, rather
+                // than moved to midnight of a recomputed date.
+                expiryForSubmit = original.expiry
             } else if (typeof data.expiry_date === 'number') {
                 const d = new Date()
                 d.setHours(0, 0, 0, 0)
@@ -259,7 +281,7 @@ export function AdminFormDialog({
                 marzban_password: selectedPanel?.panel_type === 'marzban' ? passwordToSend : null,
                 // What the form opened with, so the server applies only the
                 // change typed here and keeps charges made meanwhile.
-                traffic_before: admin ? bytesToGB(admin.traffic) : undefined,
+                traffic_before: admin ? (original?.trafficGb ?? bytesToGB(admin.traffic)) : undefined,
             }
 
             if (!passwordToSend) {
@@ -333,6 +355,7 @@ export function AdminFormDialog({
                         <Input
                             id="username"
                             placeholder="admin_name"
+                            autoComplete="off"
                             disabled={isSubmitting || !!admin}
                             {...register('username')}
                         />
@@ -348,6 +371,9 @@ export function AdminFormDialog({
                             id="password"
                             type="password"
                             placeholder={admin ? 'Leave empty to keep current' : 'Enter password'}
+                            // Otherwise the browser fills in the superadmin's own
+                            // saved login, and saving gives this admin that password.
+                            autoComplete="new-password"
                             disabled={isSubmitting}
                             {...register('password', {
                                 required: admin ? false : 'Password is required',
