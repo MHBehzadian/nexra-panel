@@ -96,7 +96,8 @@ def update_admin_values(
         else admin.hashed_password
     )
     if admin:
-        if admin.panel != admin_input.panel:
+        panel_changed = admin.panel != admin_input.panel
+        if panel_changed:
             # The ledger describes the users on the old panel; left in place,
             # the next sync would see them all as deleted and refund them.
             forget_marzban_ledger(db, admin)
@@ -106,7 +107,11 @@ def update_admin_values(
         admin.panel = admin_input.panel
         admin.inbound_id = admin_input.inbound_id
         admin.inbound_flow = admin_input.flow
-        admin.marzban_inbounds = admin_input.marzban_inbounds
+        # Kept when none is sent: an edit form that couldn't load the panel's
+        # inbound list sends none, and a Marzban admin without inbounds makes
+        # users with no configuration at all.
+        if admin_input.marzban_inbounds or panel_changed:
+            admin.marzban_inbounds = admin_input.marzban_inbounds
         if admin_input.marzban_password:
             admin.marzban_password = admin_input.marzban_password
         if admin_input.traffic_before is None:
