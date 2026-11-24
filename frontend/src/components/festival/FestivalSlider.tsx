@@ -29,7 +29,7 @@ function useRemaining(endsAt: string) {
 function Unit({ value, label }: { value: string; label: string }) {
     return (
         <div className="flex flex-col items-center">
-            <div className="tabular flex h-12 min-w-[3.25rem] items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-2 text-2xl font-black leading-none text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:h-14 sm:min-w-[4rem] sm:text-3xl md:h-16 md:min-w-[4.75rem] md:text-4xl">
+            <div className="tabular flex h-11 min-w-[2.75rem] items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-1.5 text-xl font-black leading-none text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:h-14 sm:min-w-[4rem] sm:px-2 sm:text-3xl md:h-16 md:min-w-[4.75rem] md:text-4xl">
                 {value}
             </div>
             <span className="mt-1.5 text-[11px] font-medium text-white/55 sm:text-xs">{label}</span>
@@ -38,7 +38,7 @@ function Unit({ value, label }: { value: string; label: string }) {
 }
 
 function Colon() {
-    return <span className="pb-6 text-xl font-black text-[#ff2d3d] sm:text-2xl md:text-3xl">:</span>
+    return <span className="pb-6 text-lg font-black text-[#ff2d3d] sm:text-2xl md:text-3xl">:</span>
 }
 
 function CountdownSlide({ endsAt }: { endsAt: string }) {
@@ -64,7 +64,7 @@ function CountdownSlide({ endsAt }: { endsAt: string }) {
             <div aria-hidden="true" className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-transparent via-[#ff2d3d] to-transparent shadow-[0_0_18px_1px_rgba(255,45,61,.45)]" />
             <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-transparent via-[#ff2d3d] to-transparent shadow-[0_0_18px_1px_rgba(255,45,61,.45)]" />
 
-            <DiscountSticker className="absolute left-3 top-3 h-11 w-11 rotate-[-12deg] drop-shadow-[0_6px_14px_rgba(255,45,61,.45)] sm:left-5 sm:top-4 sm:h-14 sm:w-14" />
+            <DiscountSticker className="absolute left-2 top-2 h-9 w-9 rotate-[-12deg] drop-shadow-[0_6px_14px_rgba(255,45,61,.45)] sm:left-5 sm:top-4 sm:h-14 sm:w-14" />
             {/* Hidden on phones, where it would run into the heading. */}
             <div className="absolute right-4 top-3 hidden items-center gap-2 sm:flex text-[10px] font-black uppercase tracking-[0.28em] text-white/60 sm:right-6 sm:top-4" dir="ltr">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-[#ff2d3d] shadow-[0_0_10px_2px_rgba(255,45,61,.6)]" />
@@ -74,12 +74,14 @@ function CountdownSlide({ endsAt }: { endsAt: string }) {
             <div className="relative flex h-full flex-col items-center justify-center gap-2 px-4 sm:gap-3">
                 <span className="text-xs font-medium text-white/70 sm:text-sm">زمان باقی‌مانده</span>
                 {left ? (
-                    <div className="flex items-start gap-1.5 sm:gap-3" dir="ltr">
+                    <div className="flex items-start gap-1 sm:gap-3" dir="ltr">
                         <Unit value={fa(left.days)} label="روز" />
                         <Colon />
                         <Unit value={fa(left.hours)} label="ساعت" />
                         <Colon />
                         <Unit value={fa(left.minutes)} label="دقیقه" />
+                        <Colon />
+                        <Unit value={fa(left.seconds)} label="ثانیه" />
                     </div>
                 ) : null}
                 <span className="text-sm font-black text-white sm:text-base md:text-lg">
