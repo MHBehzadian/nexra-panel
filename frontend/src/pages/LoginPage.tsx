@@ -10,37 +10,37 @@ import logo from '@/assets/logo.png'
 const styles = `
 .nx-login-root{
   position:fixed; inset:0; z-index:0; overflow:hidden;
-  background:hsl(var(--background)); color:hsl(var(--foreground));
+  background:#0b0c16; color:hsl(var(--foreground));
   display:flex; align-items:center; justify-content:center; padding:24px;
   -webkit-font-smoothing:antialiased;
-  background-image:radial-gradient(ellipse 70% 50% at 50% -10%, hsl(var(--brand-blue) / .12), transparent 62%);
 }
-/* Slow drifting colour behind the card, in the panel's own blue. Blurred far
-   past the point of any visible edge, so it reads as light in the room rather
-   than as circles. */
-.nx-aurora{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;will-change:transform}
-.nx-aurora-1{width:46vw;height:46vw;min-width:380px;min-height:380px;top:-14%;left:-8%;
-  background:radial-gradient(circle, hsl(var(--brand-blue) / .62), transparent 70%);
+/* The theme's cover: near-black, Prussian blue rising from the lower left,
+   pale amber light at the lower right and the top. Blurred far past any
+   visible edge, so it reads as light in the room rather than as circles. */
+.nx-aurora{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;will-change:transform}
+.nx-aurora-1{width:50vw;height:50vw;min-width:380px;min-height:380px;bottom:-22%;left:-12%;
+  background:radial-gradient(circle, rgba(15,52,96,.95), rgba(22,33,62,.5) 45%, transparent 70%);
   animation:nx-drift-1 24s ease-in-out infinite alternate}
-.nx-aurora-2{width:40vw;height:40vw;min-width:320px;min-height:320px;bottom:-16%;right:-6%;
-  background:radial-gradient(circle, hsl(217 91% 55% / .50), transparent 70%);
+.nx-aurora-2{width:44vw;height:44vw;min-width:340px;min-height:340px;bottom:-20%;right:-10%;
+  background:radial-gradient(circle, rgba(228,240,204,.62), rgba(228,240,204,.18) 40%, transparent 70%);
   animation:nx-drift-2 30s ease-in-out infinite alternate}
-.nx-aurora-3{width:34vw;height:34vw;min-width:280px;min-height:280px;top:34%;right:22%;
-  background:radial-gradient(circle, hsl(205 90% 60% / .42), transparent 70%);
+.nx-aurora-3{width:40vw;height:30vw;min-width:300px;min-height:220px;top:-18%;left:20%;
+  background:radial-gradient(circle, rgba(228,240,204,.2), transparent 70%);
   animation:nx-drift-3 20s ease-in-out infinite alternate}
 @keyframes nx-drift-1{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(8vw,6vh,0) scale(1.14)}}
 @keyframes nx-drift-2{from{transform:translate3d(0,0,0) scale(1.08)}to{transform:translate3d(-7vw,-5vh,0) scale(1)}}
 @keyframes nx-drift-3{from{transform:translate3d(0,0,0) scale(.94)}to{transform:translate3d(-5vw,7vh,0) scale(1.12)}}
 .nx-card{
   width:100%; max-width:412px;
-  background:var(--surface-gradient);
-  border:1px solid hsl(var(--border));
+  background:linear-gradient(145deg, rgba(30,31,55,.78) 0%, rgba(26,26,46,.74) 50%, rgba(22,33,62,.78) 100%);
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+  border:1px solid rgba(228,240,204,.10);
   border-radius:1.75rem; padding:36px 32px 24px;
   box-shadow:inset 0 1px 0 0 var(--surface-highlight), var(--surface-shadow);
   position:relative; overflow:hidden; z-index:1;
 }
 .nx-brand{display:flex;align-items:center;gap:9px;font-size:11px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:hsl(var(--muted-foreground));margin-bottom:22px}
-.nx-dot{width:8px;height:8px;border-radius:50%;background:hsl(var(--brand-blue));box-shadow:0 0 12px 1px hsl(var(--brand-blue) / .5)}
+.nx-dot{width:8px;height:8px;border-radius:50%;background:hsl(var(--primary));box-shadow:0 0 12px 1px hsl(var(--primary) / .55)}
 .nx-logo{display:flex;justify-content:center;margin-bottom:18px}
 .nx-logo img{width:132px;height:auto}
 .nx-title{font-weight:900;font-size:28px;letter-spacing:-.02em;line-height:1.3;margin-bottom:8px;color:hsl(var(--foreground))}
@@ -50,10 +50,10 @@ const styles = `
 .nx-field{position:relative}
 .nx-field label{position:absolute;top:-7px;left:12px;background:hsl(var(--card));padding:0 6px;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:hsl(var(--muted-foreground))}
 .nx-field input{width:100%;background:hsl(var(--card));border:1px solid hsl(var(--input));border-radius:12px;padding:15px 14px;color:hsl(var(--foreground));font-family:inherit;font-size:14px;transition:border-color .15s ease,box-shadow .15s ease}
-.nx-field input:focus{outline:none;border-color:hsl(var(--brand-blue));box-shadow:0 0 0 3px hsl(var(--brand-blue) / .18)}
+.nx-field input:focus{outline:none;border-color:hsl(var(--ring));box-shadow:0 0 0 3px hsl(var(--ring) / .18)}
 .nx-field input::placeholder{color:hsl(var(--muted-foreground) / .6)}
 .nx-fielderr{color:hsl(var(--destructive));font-size:12px;margin-top:6px}
-.nx-btn{margin-top:6px;width:100%;background:hsl(var(--primary));color:hsl(var(--primary-foreground));border:0;border-radius:12px;padding:16px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 12px 28px rgba(19,34,56,.16);transition:transform .18s ease,background .15s ease,box-shadow .18s ease}
+.nx-btn{margin-top:6px;width:100%;background:hsl(var(--primary));color:hsl(var(--primary-foreground));border:0;border-radius:12px;padding:16px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 12px 32px rgba(228,240,204,.14);transition:transform .18s ease,background .15s ease,box-shadow .18s ease}
 .nx-btn:hover{background:hsl(var(--primary) / .9);transform:translateY(-2px)}
 .nx-btn:active{transform:translateY(0)}
 .nx-btn:disabled{opacity:.55;cursor:default;transform:none}
@@ -81,15 +81,15 @@ export function LoginPage() {
         settingsAPI.getBranding().then(setBranding).catch(() => { })
     }, [whiteLabel])
 
-    // Light only, whatever the saved theme is. index.html skips the class on a
-    // direct hit; this covers arriving here from inside the app (logging out),
-    // and hands the theme back on the way out.
+    // Dark only, whatever the saved theme is: the page is the theme's cover.
+    // index.html sets the class on a direct hit; this covers arriving here
+    // from inside the app (logging out), and hands the theme back on the way out.
     useEffect(() => {
         const root = document.documentElement
         const wasDark = root.classList.contains('dark')
-        root.classList.remove('dark')
+        root.classList.add('dark')
         return () => {
-            if (wasDark) root.classList.add('dark')
+            if (!wasDark) root.classList.remove('dark')
         }
     }, [])
 
