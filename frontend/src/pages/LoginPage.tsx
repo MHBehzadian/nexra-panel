@@ -6,6 +6,7 @@ import { loginSchema, LoginFormData } from '@/types'
 import { authAPI, settingsAPI, getLogoUrl } from '@/lib/api'
 import { setToken, getDecodedToken, isTokenValid, isWhiteLabelLogin, rememberLoginKind } from '@/lib/auth'
 import logo from '@/assets/logo.png'
+import { ThemedLogo } from '@/components/ThemedLogo'
 
 const styles = `
 .nx-login-root{
@@ -136,7 +137,7 @@ export function LoginPage() {
 
                 {!whiteLabel && (
                     <div className="nx-logo">
-                        <img src={branding.has_logo ? getLogoUrl() : logo} alt={branding.login_title} />
+                        <ThemedLogo src={branding.has_logo ? getLogoUrl() : logo} alt={branding.login_title} />
                     </div>
                 )}
 
