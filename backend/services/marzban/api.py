@@ -183,16 +183,19 @@ class APIService:
         expire_ts = user.expiry_time // 1000 if user.expiry_time else 0
         data_limit = int(user.total) if user.total is not None else 0
 
+        on_hold = bool(user.on_hold and user.on_hold_days)
         data = {
             "username": user.email,
-            "status": "active",
-            "expire": expire_ts,
+            # On hold: no expiry yet; Marzban starts the on_hold_expire_duration
+            # at the user's first connection.
+            "status": "on_hold" if on_hold else "active",
+            "expire": 0 if on_hold else expire_ts,
             "data_limit": data_limit,
             "data_limit_reset_strategy": "no_reset",
             "inbounds": self.inbounds,
             "proxies": proxies,
             "note": (user.note or "").strip(),
-            "on_hold_expire_duration": 0,
+            "on_hold_expire_duration": user.on_hold_days * 86400 if on_hold else 0,
             "on_hold_timeout": None,
         }
 
@@ -208,14 +211,17 @@ class APIService:
         expire_ts = user_data.expiry_time // 1000 if user_data.expiry_time else 0
         data_limit = int(user_data.total) if user_data.total is not None else 0
 
+        on_hold = bool(user_data.enable and user_data.on_hold and user_data.on_hold_days)
         update_data = {
-            "status": "active" if user_data.enable else "disabled",
+            "status": "on_hold" if on_hold else ("active" if user_data.enable else "disabled"),
             "data_limit": data_limit,
-            "expire": expire_ts,
+            "expire": 0 if on_hold else expire_ts,
             "data_limit_reset_strategy": "no_reset",
             "proxies": {},
             "inbounds": {},
         }
+        if on_hold:
+            update_data["on_hold_expire_duration"] = user_data.on_hold_days * 86400
         # Marzban leaves a field it isn't sent as it is. This used to send ""
         # every time, which wiped the note of any user edited through Nexra.
         if user_data.note is not None:

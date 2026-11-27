@@ -99,6 +99,9 @@ class ClientsOutput(BaseModel):
     # Marzban only: "" when the user has none. None means the panel type has
     # no notes, and the UI hides the field.
     note: Optional[str] = None
+    # Marzban only: waiting for its first connection to start its days.
+    on_hold: bool = False
+    on_hold_days: Optional[int] = None
 
     class Config:
         from_attributes = True

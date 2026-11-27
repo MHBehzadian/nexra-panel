@@ -244,6 +244,9 @@ export const userSchema = z.object({
         .string()
         .max(500, 'Maximum 500 characters')
         .optional(),
+
+    // Count the days from the first connection (Marzban "on hold").
+    onHold: z.boolean().optional(),
 })
 
 export type UserFormData = z.infer<typeof userSchema>
@@ -263,6 +266,9 @@ export interface ClientsOutput {
     flow?: string
     // Marzban only ("" when empty); null/absent for panels without notes.
     note?: string | null
+    // Marzban only: its days start at the first connection.
+    on_hold?: boolean
+    on_hold_days?: number | null
 }
 
 // API Response Types

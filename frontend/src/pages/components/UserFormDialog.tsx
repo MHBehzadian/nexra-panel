@@ -25,6 +25,9 @@ interface UserFormDialogProps {
     existingUsernames?: string[]
     // Whether the admin's panel keeps a note per user (Marzban does).
     supportsNote?: boolean
+    // Whether users can wait for their first connection to start their days
+    // (Marzban's "on hold").
+    supportsOnHold?: boolean
 }
 
 // Random username: 5 to 7 English digits, avoiding names already in use.
@@ -49,7 +52,7 @@ function generateRandomUsername(taken: Set<string>): string {
     return name
 }
 
-export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsernames = [], supportsNote = false }: UserFormDialogProps): JSX.Element {
+export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsernames = [], supportsNote = false, supportsOnHold = false }: UserFormDialogProps): JSX.Element {
     const [serverError, setServerError] = useState<string | null>(null)
     // Expiry as it stands on the server, kept so an edit that doesn't touch the
     // days field re-sends the exact same timestamp instead of a rounded date.
@@ -61,6 +64,8 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
         formState: { errors, isSubmitting },
         reset,
         setValue,
+        watch,
+        setError,
     } = useForm<UserFormData>({
         resolver: zodResolver(userSchema),
         // What almost every new user gets, so the common case is one field
@@ -70,6 +75,7 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
             totalGb: 30,
             expiryDatetime: 30,
             note: '',
+            onHold: false,
         },
     })
 
@@ -78,7 +84,12 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
             setValue('email', user.username)
             setValue('totalGb', user.data_limit / (1024 ** 3))
             setValue('note', user.note ?? '')
-            if (user.expiry_date_unix) {
+            setValue('onHold', !!user.on_hold)
+            if (user.on_hold && user.on_hold_days) {
+                // Not started: the days it will get, not days left.
+                setValue('expiryDatetime', user.on_hold_days)
+                setOriginalExpiry(null)
+            } else if (user.expiry_date_unix) {
                 const exp = new Date(user.expiry_date_unix)
                 const today = new Date()
                 today.setHours(0, 0, 0, 0)
@@ -103,6 +114,18 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
 
     const onSubmit = async (data: UserFormData) => {
         setServerError(null)
+
+        // On hold needs a number of days to start counting at first connection.
+        const onHold = supportsOnHold && !!data.onHold
+        let onHoldDays: number | null = null
+        if (onHold) {
+            const days = typeof data.expiryDatetime === 'number' ? Math.floor(data.expiryDatetime) : NaN
+            if (!Number.isFinite(days) || days < 1) {
+                setError('expiryDatetime', { message: 'برای شمارش از اولین اتصال، تعداد روز را وارد کنید' })
+                return
+            }
+            onHoldDays = days
+        }
 
         try {
             // Convert expiry days (number) to date string YYYY-MM-DD for backend
@@ -148,15 +171,17 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
                     user.status,
                     user.flow || '',
                     user.id?.toString(),
-                    noteForSubmit
+                    noteForSubmit,
+                    onHoldDays
                 )
             } else {
                 // Create
                 await userAPI.createUser(
                     data.email,
                     data.totalGb,
-                    expiryForSubmit,
-                    noteForSubmit
+                    onHold ? null : expiryForSubmit,
+                    noteForSubmit,
+                    onHoldDays
                 )
             }
 
@@ -235,7 +260,9 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
 
                     {/* Expiry Date */}
                     <div className="space-y-2">
-                        <Label htmlFor="expiryDatetime">Expiry (days)</Label>
+                        <Label htmlFor="expiryDatetime">
+                            {watch('onHold') && supportsOnHold ? 'Days (from first connection) *' : 'Expiry (days)'}
+                        </Label>
                         <Input
                             id="expiryDatetime"
                             type="number"
@@ -248,7 +275,27 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
                         {errors.expiryDatetime && (
                             <p className="text-sm text-destructive">{errors.expiryDatetime.message}</p>
                         )}
-                        <p className="text-xs text-muted-foreground">Optional - Leave empty for no expiry</p>
+                        <p className="text-xs text-muted-foreground">
+                            {watch('onHold') && supportsOnHold
+                                ? 'Starts counting the first time the user connects'
+                                : 'Optional - Leave empty for no expiry'}
+                        </p>
+                        {supportsOnHold && (
+                            <label className="flex items-start gap-2 cursor-pointer pt-1" dir="rtl">
+                                <input
+                                    type="checkbox"
+                                    disabled={isSubmitting}
+                                    {...register('onHold')}
+                                    className="rounded border border-input mt-1"
+                                />
+                                <span className="text-sm">
+                                    ⏳ شمارش زمان از اولین اتصال
+                                    <span className="block text-xs text-muted-foreground">
+                                        روزهای اشتراک از وقتی شروع می‌شود که کاربر برای اولین بار وصل شود. حجم همین الان از پنل شما کم می‌شود.
+                                    </span>
+                                </span>
+                            </label>
+                        )}
                     </div>
 
                     {/* Note - Marzban's own per-user note, the same one its dashboard shows */}
