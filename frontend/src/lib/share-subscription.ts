@@ -28,6 +28,7 @@ export function trafficText(user: ClientsOutput): string {
 
 /** "۲۵ روز (تا ۱۴۰۵/۰۹/۲۸)", "منقضی شده" or "نامحدود". */
 export function timeText(user: ClientsOutput): string {
+    if (user.on_hold && user.on_hold_days) return `${faDigits(user.on_hold_days)} روز از اولین اتصال`
     if (!user.expiry_date_unix) return 'نامحدود'
     const expiry = new Date(user.expiry_date_unix)
     const days = Math.ceil((expiry.getTime() - Date.now()) / 86_400_000)

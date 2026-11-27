@@ -359,7 +359,10 @@ export const userAPI = {
         email: string,
         totalGb: number,
         expiryDatetime?: string | number | null,
-        note?: string
+        note?: string,
+        // A number puts the user on hold for that many days, counted from
+        // its first connection.
+        onHoldDays?: number | null
     ): Promise<ClientsOutput> => {
         const submitData = {
             email,
@@ -370,6 +373,7 @@ export const userAPI = {
             sub_id: generateSubId(),
             flow: '',
             ...(note !== undefined ? { note } : {}),
+            ...(onHoldDays ? { on_hold: true, on_hold_days: onHoldDays, expiry_time: 0 } : {}),
         }
 
         const response = await api.post<ResponseModel<ClientsOutput>>(`/admin/user`, submitData)
@@ -391,7 +395,9 @@ export const userAPI = {
         flow: string = '',
         userId?: string,
         // Left out, the note stays as it is on the panel; '' clears it.
-        note?: string
+        note?: string,
+        // As in createUser. Left out, an on-hold user becomes active.
+        onHoldDays?: number | null
     ): Promise<ClientsOutput> => {
         // Sanitize sub_id to remove leading and trailing slashes to prevent double slashes in subscription URL
         const sanitizedSubId = subId?.replace(/^\/+|\/+$/g, '') || '';
@@ -404,6 +410,7 @@ export const userAPI = {
             sub_id: sanitizedSubId,
             flow,
             ...(note !== undefined ? { note } : {}),
+            ...(onHoldDays ? { on_hold: true, on_hold_days: onHoldDays, expiry_time: 0 } : {}),
         }
 
         const identifier = (userUuid && userUuid !== '0') ? userUuid : (userId || '0')

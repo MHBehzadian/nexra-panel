@@ -70,6 +70,10 @@ class ClientInput(BaseModel):
     flow: str = ""
     # Marzban's free-text note on the user. Ignored by the other panel types.
     note: Optional[str] = Field(default=None, max_length=500)
+    # Marzban "on hold": the user's days start counting at its first
+    # connection rather than now. on_hold_days is that many days.
+    on_hold: bool = False
+    on_hold_days: Optional[int] = Field(default=None, ge=1, le=3650)
 
 
 class ClientUpdateInput(BaseModel):
@@ -81,6 +85,9 @@ class ClientUpdateInput(BaseModel):
     flow: str = ""
     # None leaves the note as it is on Marzban; "" clears it.
     note: Optional[str] = Field(default=None, max_length=500)
+    # As on ClientInput: keep (or put) the user on hold for on_hold_days.
+    on_hold: bool = False
+    on_hold_days: Optional[int] = Field(default=None, ge=1, le=3650)
 
 
 class BotTopupInput(BaseModel):

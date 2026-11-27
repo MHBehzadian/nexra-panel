@@ -490,7 +490,11 @@ export function DashboardPage() {
                 user.sub_id || '',
                 !user.status, // Toggle status
                 user.flow || '',
-                user.id?.toString()
+                user.id?.toString(),
+                undefined,
+                // Disabling an on-hold user disables it; enabling a disabled
+                // user makes it active, as Marzban itself does.
+                null
             )
             fetchDashboardData()
         } catch (err: any) {
@@ -1298,6 +1302,7 @@ export function DashboardPage() {
                 user={selectedUser}
                 existingUsernames={(dashboardData?.users || []).map((u) => u.username)}
                 supportsNote={dashboardData?.panel_type === 'marzban'}
+                supportsOnHold={dashboardData?.panel_type === 'marzban'}
             />
 
             {/* Delete Confirmation Dialog */}
@@ -1452,7 +1457,12 @@ function DetailsRow({
                     </div>
                 </TableCell>
                 <TableCell>
-                    {user.expiry_date_unix ? (
+                    {user.on_hold ? (
+                        <div className="space-y-1">
+                            <div className="text-sm">{user.on_hold_days ?? '?'} days</div>
+                            <div className="text-xs text-muted-foreground">from first connection</div>
+                        </div>
+                    ) : user.expiry_date_unix ? (
                         <div className="space-y-1">
                             <div className="text-sm">{formatDate(user.expiry_date_unix)}</div>
                             <div className={cn(
@@ -1475,7 +1485,7 @@ function DetailsRow({
                         <Badge className="bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">Online</Badge>
                     ) : (
                         <Badge variant={user.status ? 'default' : 'destructive'}>
-                            {user.status ? 'Active' : 'Inactive'}
+                            {user.on_hold ? 'On hold' : user.status ? 'Active' : 'Inactive'}
                         </Badge>
                     )}
                 </TableCell>
@@ -1621,7 +1631,7 @@ function MobileUserCard({
                         <Badge className="text-xs bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">Online</Badge>
                     ) : (
                         <Badge variant={user.status ? 'default' : 'destructive'} className="text-xs">
-                            {user.status ? 'Active' : 'Inactive'}
+                            {user.on_hold ? 'On hold' : user.status ? 'Active' : 'Inactive'}
                         </Badge>
                     )}
                     <ChevronDown
@@ -1652,7 +1662,9 @@ function MobileUserCard({
                     {/* Expiry */}
                     <div className="text-sm">
                         <p className="text-xs text-muted-foreground">Expiry Date</p>
-                        {user.expiry_date_unix ? (
+                        {user.on_hold ? (
+                            <span className="font-medium">{user.on_hold_days ?? '?'} days from first connection</span>
+                        ) : user.expiry_date_unix ? (
                             <div className="flex items-center gap-2">
                                 <span className="font-medium">{formatDate(user.expiry_date_unix)}</span>
                                 <span className={cn(

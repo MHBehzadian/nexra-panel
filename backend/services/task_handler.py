@@ -311,10 +311,15 @@ async def get_all_users_from_panel(
         users = []
         for user in _users:
             expire_val = user.get("expire")
+            on_hold = user.get("status") == "on_hold"
+            hold_seconds = user.get("on_hold_expire_duration") or 0
             users.append(
                 ClientsOutput(
                     username=user.get("username"),
-                    status=True if user.get("status") == "active" else False,
+                    # On hold is enabled, just not started.
+                    status=user.get("status") in ("active", "on_hold"),
+                    on_hold=on_hold,
+                    on_hold_days=round(hold_seconds / 86400) if on_hold and hold_seconds else None,
                     is_online=False,
                     online_at=user.get("online_at"),
                     data_limit=user.get("data_limit") or 0,

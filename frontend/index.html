@@ -6,8 +6,7 @@
     <link rel="icon" type="image/png" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#080e18" />
-    <meta name="theme-color" content="#f8f9fb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e0f1c" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="nexra panel" />
@@ -20,19 +19,19 @@
         // wrong theme on every load.
         (function () {
             try {
-                // The login page is light only, so it never takes the class.
-                if (/\/login\/?$/.test(location.pathname)) return;
+                // The login page is dark only (the theme's cover).
+                var login = /\/login\/?$/.test(location.pathname);
+                if (login) { document.documentElement.classList.add('dark'); return; }
                 // During the Black Friday festival the panel starts on light
                 // (dark is its black look), and the choice is kept apart from
-                // the usual one (see src/hooks/useTheme.ts).
+                // the usual one; otherwise dark is the default until someone
+                // picks light (see src/hooks/useTheme.ts).
                 var fest = JSON.parse(localStorage.getItem('nx-festival') || 'null');
                 // Never on a reseller's white-label panel (see src/lib/festival.ts).
                 var live = localStorage.getItem('nx_white_label') !== '1' && !!(fest && fest.active &&
                     (!fest.ends_at || !(Date.parse(fest.ends_at) <= Date.now())));
                 var saved = localStorage.getItem(live ? 'nx-festival-theme' : 'theme');
-                var dark = saved
-                    ? saved === 'dark'
-                    : !live && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var dark = live ? saved === 'dark' : saved !== 'light';
                 if (live) document.documentElement.classList.add('festival');
                 if (dark) document.documentElement.classList.add('dark');
             } catch (e) { }
