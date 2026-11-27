@@ -281,19 +281,14 @@ export function UserFormDialog({ isOpen, onClose, onSuccess, user, existingUsern
                                 : 'Optional - Leave empty for no expiry'}
                         </p>
                         {supportsOnHold && (
-                            <label className="flex items-start gap-2 cursor-pointer pt-1" dir="rtl">
+                            <label className="flex items-center gap-2 cursor-pointer pt-1" dir="rtl">
                                 <input
                                     type="checkbox"
                                     disabled={isSubmitting}
                                     {...register('onHold')}
-                                    className="rounded border border-input mt-1"
+                                    className="h-4 w-4 rounded border border-input"
                                 />
-                                <span className="text-sm">
-                                    ⏳ شمارش زمان از اولین اتصال
-                                    <span className="block text-xs text-muted-foreground">
-                                        روزهای اشتراک از وقتی شروع می‌شود که کاربر برای اولین بار وصل شود. حجم همین الان از پنل شما کم می‌شود.
-                                    </span>
-                                </span>
+                                <span className="text-sm">شمارش زمان بعد از اولین اتصال</span>
                             </label>
                         )}
                     </div>
